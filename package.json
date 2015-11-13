@@ -1,0 +1,31 @@
+{
+  "name": "gulp-drudge",
+  "version": "0.0.1",
+  "description": "Static site generator powered by Gulp.",
+  "homepage": "https://github.com/niklasramo/gulp-drudge",
+  "repository" : {
+    "type" : "git",
+    "url" : "git@github.com:niklasramo/gulp-drudge.git"
+  },
+  "scripts": {
+    "start": "gulp server"
+  },
+  "author": "Niklas Rämö <inramo@gmail.com> (https://github.com/niklasramo)",
+  "license": "MIT",
+  "devDependencies": {
+    "express": "^4.13.3",
+    "gulp": "^3.9.0",
+    "gulp-clean": "^0.3.1",
+    "gulp-data": "^1.2.0",
+    "gulp-foreach": "^0.1.0",
+    "gulp-if": "^2.0.0",
+    "gulp-prettify": "^0.3.0",
+    "gulp-sass": "^2.1.0",
+    "gulp-sequence": "^0.4.1",
+    "gulp-swig": "^0.7.4",
+    "gulp-uglify": "^1.4.2",
+    "gulp-useref": "^3.0.0",
+    "lodash": "^3.10.1",
+    "path": "^0.12.7"
+  }
+}

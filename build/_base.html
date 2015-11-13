@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html class="{% block html-class %}{% endblock %}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta http-equiv="cleartype" content="on">
+    <title>{% block meta-title %}{{ site_name }}{% endblock %}</title>
+    <meta name="description" content="{% block meta-description %}{{ site_description }}{% endblock %}">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="MobileOptimized" content="320">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-touch-fullscreen" content="yes">
+    <meta name="msapplication-tap-highlight" content="no">
+    <meta name="viewport" content="{% block meta-viewport %}width=device-width, initial-scale=1.0, user-scalable=yes{% endblock %}">
+    <link type="image/png" rel="shortcut icon" href="static/images/favicon.png">
+    {% block styles %}
+      <link rel="stylesheet" href="static/styles/main.css">
+    {% endblock %}
+    {% block scripts-head %}
+      <!-- build:js static/scripts/base-head.js -->
+      <script src="static/scripts/head.js"></script>
+      <!-- endbuild -->
+    {% endblock %}
+  </head>
+  <body class="{% block body-class %}{% endblock %}">
+    {% block main %}{% endblock %}
+    {% block scripts-body %}
+      <!-- build:js static/scripts/base-body.js -->
+      <script src="static/scripts/body.js"></script>
+      <!-- endbuild -->
+    {% endblock %}
+  </body>
+</html>

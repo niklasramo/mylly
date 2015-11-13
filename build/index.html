@@ -1,0 +1,9 @@
+{% extends '_base.html' %}
+
+{% block meta-title %}{{ page_title }} | {% parent %}{% endblock %}
+
+{% block meta-description %}{{ page_description }}{% endblock %}
+
+{% block main %}
+  <h1>{{ page_title }}</h1>
+{% endblock %}
