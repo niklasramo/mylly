@@ -1,19 +1,43 @@
 <!DOCTYPE html>
 <html class="{% block html-class %}{% endblock %}">
   <head>
-    <meta charset="utf-8">
-    <meta name="robots" content="noindex">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-    <meta http-equiv="cleartype" content="on">
-    <title>{% block meta-title %}{{ site_name }}{% endblock %}</title>
-    <meta name="description" content="{% block meta-description %}{{ site_description }}{% endblock %}">
-    <meta name="HandheldFriendly" content="True">
-    <meta name="MobileOptimized" content="320">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-touch-fullscreen" content="yes">
-    <meta name="msapplication-tap-highlight" content="no">
-    <meta name="viewport" content="{% block meta-viewport %}width=device-width, initial-scale=1.0, user-scalable=yes{% endblock %}">
-    <link type="image/png" rel="shortcut icon" href="static/images/favicon.png">
+    {% block head %}
+      <meta charset="utf-8">
+      <title>{% block meta-title %}{{ site_name }}{% endblock %}</title>
+      <meta name="description" content="{% block meta-description %}{{ site_description }}{% endblock %}">
+      <meta name="viewport" content="{% block meta-viewport %}width=device-width, initial-scale=1.0, user-scalable=yes{% endblock %}">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+      <meta http-equiv="cleartype" content="on">
+      {# App name for win8/10 and chrome #}
+      <meta name="application-name" content="{{ site_name }}">
+      {# Windows 8/10 web app config #}
+      <meta name="msapplication-tap-highlight" content="no">
+      <meta name="msapplication-TileColor" content="#000">
+      <meta name="msapplication-TileImage" content="static/images/win-tile-image-144x144.png">
+      <meta name="msapplication-square70x70logo" content="static/images/win-tile-icon-70x70.png">
+      <meta name="msapplication-square150x150logo" content="static/images/win-tile-icon-150x150.png">
+      <meta name="msapplication-square310x310logo" content="static/images/win-tile-icon-310x310.png">
+      <meta name="msapplication-square310x150logo" content="static/images/win-tile-icon-310x150.png">
+      {# Chrome web app config #}
+      <meta name="mobile-web-app-capable" content="yes">
+      <link rel="icon" sizes="192x192" href="chrome-icon-192x192.png">
+      {# iOS web app config #}
+      <meta name="apple-mobile-web-app-title" content="{{ site_name }}">
+      <meta name="apple-mobile-web-app-capable" content="yes">
+      <meta name="apple-mobile-web-app-status-bar-style" content="default">
+      <meta name="format-detection" content="telephone=yes">
+      <link rel="apple-touch-startup-image" href="static/images/apple-startup.png">
+      <link rel="apple-touch-icon-precomposed" sizes="180x180" href="static/images/apple-touch-icon-180x180-precomposed.png">
+      <link rel="apple-touch-icon-precomposed" sizes="152x152" href="static/images/apple-touch-icon-152x152-precomposed.png">
+      <link rel="apple-touch-icon-precomposed" sizes="144x144" href="static/images/apple-touch-icon-144x144-precomposed.png">
+      <link rel="apple-touch-icon-precomposed" sizes="120x120" href="static/images/apple-touch-icon-120x120-precomposed.png">
+      <link rel="apple-touch-icon-precomposed" sizes="114x114" href="static/images/apple-touch-icon-114x114-precomposed.png">
+      <link rel="apple-touch-icon-precomposed" sizes="76x76" href="static/images/apple-touch-icon-76x76-precomposed.png">
+      <link rel="apple-touch-icon-precomposed" sizes="72x72" href="static/images/apple-touch-icon-72x72-precomposed.png">
+      <link rel="apple-touch-icon-precomposed" href="static/images/apple-touch-icon-57x57-precomposed.png">
+      {# Good old favicon (todo: check some guidance from here http://realfavicongenerator.net/) #}
+      <link type="image/png" rel="shortcut icon" href="static/images/favicon.png">
+    {% endblock %}
     {% block styles %}
       <link rel="stylesheet" href="static/styles/main.css">
     {% endblock %}
@@ -25,6 +49,16 @@
   </head>
   <body class="{% block body-class %}{% endblock %}">
     {% block main %}{% endblock %}
+    {% if google_analytics_ua %}
+      <script>
+        (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+        (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+        m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+        })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+        ga('create', {{ google_analytics_ua }}, 'auto');
+        ga('send', 'pageview');
+      </script>
+    {% endif %}
     {% block scripts-body %}
       <!-- build:js static/scripts/base-body.js -->
       <script src="static/scripts/body.js"></script>

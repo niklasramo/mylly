@@ -1,6 +1,6 @@
 // Modules
 
-var fs = require('fs');
+var fs = require('fs-extra');
 var path = require('path');
 var _ = require('lodash');
 var express = require('express');
@@ -16,21 +16,45 @@ var clean = require('gulp-clean');
 var sequence = require('gulp-sequence');
 var prettify = require('gulp-prettify');
 var foreach = require('gulp-foreach');
+var reveasy = require('gulp-rev-easy');
+var jimp = require('jimp');
+
+// Root paths
+
+var appRoot = require('app-root-path');
+var projectRoot = __dirname;
+
+// Drudge config
+
+var config = _.assign(getFileData(projectRoot + '/drudge.json'), getFileData(appRoot + '/drudge.json'));
+var paths = config.paths;
 
 // Custom helpers
 
+function pathExists(filePath) {
+
+  try {
+    var stat = fs.statSync(filePath);
+    return stat.isFile() || stat.isDirectory();
+  }
+  catch (err) {
+    return false;
+  }
+
+}
+
 function getFileData(filePath) {
 
-  return fs.existsSync(filePath) ? require(filePath) : {};
+  return pathExists(filePath) ? require(filePath) : {};
 
 }
 
 function getTemplateData(file) {
 
-  var baseData = getFileData('./build/_base.json');
-  var filePath = './build/' + path.basename(file.path);
-  var tplData = getFileData(filePath.substr(0, filePath.lastIndexOf('.')) + '.json');
-  return _.assign(baseData, tplData);
+  var filePath = file.path;
+  var filePathWithoutSuffix = filePath.substr(0, filePath.lastIndexOf('.'));
+  var tplData = getFileData(filePathWithoutSuffix + '.json');
+  return _.assign(config.data, tplData);
 
 }
 
@@ -39,25 +63,25 @@ function getTemplateData(file) {
 gulp.task('clean', function () {
 
   return gulp
-  .src('dist', {read: false})
+  .src(paths.dist, {read: false})
   .pipe(clean());
 
 });
 
-gulp.task('setup', function () {
+gulp.task('setup', function (cb) {
 
-  return gulp
-  .src(['./build/static/images/**/*', './build/static/fonts/**/*'], {
-    base: './build/static'
-  })
-  .pipe(gulp.dest('./dist/static'));
+  fs.copySync(paths.build + paths.images, paths.dist + paths.images);
+  fs.copySync(paths.build + paths.fonts, paths.dist + paths.fonts);
+  fs.ensureDirSync(paths.dist + paths.scripts);
+  fs.ensureDirSync(paths.dist + paths.styles);
+  cb();
 
 });
 
 gulp.task('sass', function () {
 
   return gulp
-  .src('./build/static/styles/**/*.scss')
+  .src(paths.build + paths.styles + '/**/*.scss')
   .pipe(foreach(function (stream, file) {
     var fileName = path.basename(file.path);
     return stream
@@ -66,14 +90,14 @@ gulp.task('sass', function () {
       outFile: fileName.substr(0, fileName.lastIndexOf('.')) + '.css'
     }));
   }))
-  .pipe(gulp.dest('./dist/static/styles'));
+  .pipe(gulp.dest(paths.dist + paths.styles));
 
 });
 
 gulp.task('build', function() {
 
   return gulp
-  .src('./build/[^_]*.html')
+  .src(paths.build + '/**/[^_]*.html')
   .pipe(data(getTemplateData))
   .pipe(swig())
   .pipe(useref())
@@ -81,14 +105,42 @@ gulp.task('build', function() {
   .pipe(gulpif('*.html', prettify({
     indent_size: 2
   })))
-  .pipe(gulp.dest('./dist'));
+  .pipe(gulp.dest(paths.dist));
+
+});
+
+gulp.task('rev', function() {
+
+  return gulp
+  .src(paths.dist + '/**/*.html')
+  .pipe(reveasy({
+    elementAttributes: {
+      js: {
+        name: 'script',
+        src: 'src'
+      },
+      css: {
+        name: 'link[type="text/css"]',
+        src: 'href'
+      },
+      favicon: {
+        name: 'link[type="image/png"]',
+        src: 'href'
+      },
+      img:{
+        name: 'img',
+        src : 'src'
+      }
+    }
+  }))
+  .pipe(gulp.dest(paths.dist));
 
 });
 
 gulp.task('server', function () {
 
   var app = express();
-  app.use(express.static('dist'));
+  app.use(express.static(paths.dist));
   var chain = Promise.resolve().then(startApp);
 
   function startApp() {
@@ -117,7 +169,7 @@ gulp.task('server', function () {
 
   }
 
-  gulp.watch('./build/**/*', function () {
+  gulp.watch(paths.build + '/**/*', function () {
 
     chain = chain.then(stopApp).then(rebuildApp).then(startApp);
 
@@ -125,8 +177,43 @@ gulp.task('server', function () {
 
 });
 
-gulp.task('default', function (cb) {
+gulp.task('install', function (cb) {
 
-  sequence('clean', 'setup', 'sass', 'build')(cb);
+  // If build folder exists already let's only update the _base.html file.
+  if (pathExists(paths.build)) {
+    fs.copySync(projectRoot + '/_base.html', paths.build + '/_base.html');
+  }
+  // If build folder does not exist let's copy it from project to the specified destination.
+  else {
+    fs.copySync(paths.build + paths.fonts, paths.build);
+  }
+
+  cb();
 
 });
+
+gulp.task('default', function (cb) {
+
+  sequence('clean', 'setup', 'sass', 'build', 'rev')(cb);
+
+});
+
+// Module API
+
+module.exports = {
+  install: function () {
+    return new Promise(function (res) {
+      sequence('install')(res);
+    });
+  },
+  build: function () {
+    return new Promise(function (res) {
+      sequence('build')(res);
+    });
+  },
+  server: function () {
+    return new Promise(function (res) {
+      sequence('server')(res);
+    });
+  }
+};

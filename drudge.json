@@ -1,0 +1,17 @@
+{
+  "paths": {
+    "build": "./build",
+    "dist": "./dist",
+    "images": "/static/images",
+    "fonts": "/static/fonts",
+    "styles": "/static/styles",
+    "scripts": "/static/scripts"
+  },
+  "data": {
+    "site_name": "My website",
+    "site_description": "My website description",
+    "site_version": "0.0.1",
+    "site_author": "",
+    "google_analytics_ua": ""
+  }
+}
