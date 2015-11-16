@@ -11,7 +11,6 @@ var data = require('gulp-data');
 var swig = require('gulp-swig');
 var useref = require('gulp-useref');
 var gulpif = require('gulp-if');
-var rev = require('gulp-rev');
 var clean = require('gulp-clean');
 var sequence = require('gulp-sequence');
 var prettify = require('gulp-prettify');
@@ -55,6 +54,45 @@ function getTemplateData(file) {
   var filePathWithoutSuffix = filePath.substr(0, filePath.lastIndexOf('.'));
   var tplData = getFileData(filePathWithoutSuffix + '.json');
   return _.assign(config.data, tplData);
+
+}
+
+function generateAppleTouchIcons() {
+
+  var sourcePath = paths.build + paths.images + '/templates/apple-touch-icon-180x180-template.png';
+  var sizes = [180, 152, 144, 120, 114, 76, 72, 57];
+
+  sizes.forEach(function (size) {
+    jimp.read(sourcePath, function (err, img) {
+      if (err) throw err;
+      img.resize(size, size).write(paths.build + paths.images + '/apple-touch-icon-' + size + 'x' + size + '-precomposed.png');
+    });
+  });
+
+}
+
+function generateWinTileIcons() {
+
+  var sourcePath = paths.build + paths.images + '/templates/win-tile-icon-310x310-template.png';
+  var sizes = [310, 150, 70];
+
+  sizes.forEach(function (size) {
+    jimp.read(sourcePath, function (err, img) {
+      if (err) throw err;
+      img.resize(size, size).write(paths.build + paths.images + '/win-tile-icon-' + size + 'x' + size + '.png');
+    });
+  });
+
+  jimp.read(paths.build + paths.images + '/templates/win-tile-icon-310x150-template.png', function (err, img) {
+    if (err) throw err;
+    img.resize(size, size).write(paths.build + paths.images + '/win-tile-icon-310x150.png');
+  });
+
+}
+
+function generateChromeIcons() {
+
+  // TODO: Generate icons and manifest file.
 
 }
 
