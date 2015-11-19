@@ -1,13 +1,14 @@
-# gulp-drudge
+# drudge
 
-A simple (and opinionated) static site generator powered by Gulp. By default uses Swig for templates and Sass for styles.
+A simple (and opinionated) static site generator for Node.js. Out of the box drudge will minify and concatenate your Sass stylesheets and scripts, compile Swig templates into static HTML (you can provide data via json file for each template), generate all sizes of favicons and touch icons from image templates, validate your code.
 
-**Commands:**
+**Install**
 
-* `gulp`
-  * Parses 'build' folder and builds a static site into a folder named 'dist' which, after the build, contains static html/css/js files ready to be deployed as is.
-* `gulp server`
-  * Starts a live server which runs in port 4000 serving the contents of 'dist' folder. Each time you touch the 'build' folder the build process is ran and the server is restarted.
+`npm install drudge --save`
+
+**Usage**
+
+Coming up...
 
 ## License
 

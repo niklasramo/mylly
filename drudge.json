@@ -1,17 +1,43 @@
 {
-  "paths": {
-    "build": "./build",
-    "dist": "./dist",
-    "images": "/static/images",
-    "fonts": "/static/fonts",
-    "styles": "/static/styles",
-    "scripts": "/static/scripts"
-  },
-  "data": {
+  "build": "./build",
+  "dist": "./dist",
+  "ignore": [
+    "/static/images/templates",
+    "/static/scripts/**/*",
+    "/static/styles/**/*",
+    "/**/*.ctx.json",
+    "/**/[_]*.html"
+  ],
+  "sass_root": "",
+  "resize_images": [
+    {
+      "source": "/static/images/templates/icon.png",
+      "sizes": [[192, 192], [180, 180], [152, 152], [144, 144], [120, 120], [114, 114], [76, 76], [72, 72], [57, 57]],
+      "target": "/static/images/icon-{{ width }}x{{ height }}.png"
+    },
+    {
+      "source": "/static/images/templates/tile.png",
+      "sizes": [[310, 310], [150, 150], [70, 70]],
+      "target": "/static/images/tile-{{ width }}x{{ height }}.png"
+    },
+    {
+      "source": "/static/images/templates/tile-wide.png",
+      "sizes": [[310, 150]],
+      "target": "/static/images/tile-{{ width }}x{{ height }}.png"
+    }
+  ],
+  "optimize_images": true,
+  "config": {
+    "site_url": "",
     "site_name": "My website",
     "site_description": "My website description",
     "site_version": "0.0.1",
     "site_author": "",
-    "google_analytics_ua": ""
+    "google_analytics_ua": "",
+    "tile_color": "#ffffff",
+    "static_path": "/static",
+    "styles_path": "/static/styles",
+    "scripts_path": "/static/scripts",
+    "images_path": "/static/images"
   }
 }

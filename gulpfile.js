@@ -2,6 +2,7 @@
 
 var fs = require('fs-extra');
 var path = require('path');
+var del = require('del');
 var _ = require('lodash');
 var express = require('express');
 var gulp = require('gulp');
@@ -11,7 +12,6 @@ var data = require('gulp-data');
 var swig = require('gulp-swig');
 var useref = require('gulp-useref');
 var gulpif = require('gulp-if');
-var clean = require('gulp-clean');
 var sequence = require('gulp-sequence');
 var prettify = require('gulp-prettify');
 var foreach = require('gulp-foreach');
@@ -23,10 +23,14 @@ var jimp = require('jimp');
 var appRoot = require('app-root-path');
 var projectRoot = __dirname;
 
+// Package data
+
+var pkg = getFileData(projectRoot + '/package.json');
+
 // Drudge config
 
-var config = _.assign(getFileData(projectRoot + '/drudge.json'), getFileData(appRoot + '/drudge.json'));
-var paths = config.paths;
+var cfg = _.assign({}, getFileData(projectRoot + '/drudge.json'), getFileData(appRoot + '/drudge.json')) || {};
+var tplCoreData = {config: typeof cfg.config === 'object' ? cfg.config : {}};
 
 // Custom helpers
 
@@ -52,90 +56,85 @@ function getTemplateData(file) {
 
   var filePath = file.path;
   var filePathWithoutSuffix = filePath.substr(0, filePath.lastIndexOf('.'));
-  var tplData = getFileData(filePathWithoutSuffix + '.json');
-  return _.assign(config.data, tplData);
+  var tplData = getFileData(filePathWithoutSuffix + '.ctx.json');
+  return _.assign({}, tplCoreData, tplData);
 
 }
 
-function generateAppleTouchIcons() {
+function generateImages() {
 
-  var sourcePath = paths.build + paths.images + '/templates/apple-touch-icon-180x180-template.png';
-  var sizes = [180, 152, 144, 120, 114, 76, 72, 57];
-
-  sizes.forEach(function (size) {
-    jimp.read(sourcePath, function (err, img) {
-      if (err) throw err;
-      img.resize(size, size).write(paths.build + paths.images + '/apple-touch-icon-' + size + 'x' + size + '-precomposed.png');
+  var promises = [];
+  var sets = (cfg.resize_images || []);
+  sets.forEach(function (set) {
+    set.sizes.forEach(function (size) {
+      var sourcePath = cfg.build + set.source;
+      var targetPath = cfg.dist + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]);
+      if (!pathExists(targetPath)) {
+        var promise = jimp.read(sourcePath).then(function (img) {
+          return img.resize(size[0], size[1]).write(targetPath);
+        });
+        promises.push(promise);
+      }
     });
   });
 
-}
-
-function generateWinTileIcons() {
-
-  var sourcePath = paths.build + paths.images + '/templates/win-tile-icon-310x310-template.png';
-  var sizes = [310, 150, 70];
-
-  sizes.forEach(function (size) {
-    jimp.read(sourcePath, function (err, img) {
-      if (err) throw err;
-      img.resize(size, size).write(paths.build + paths.images + '/win-tile-icon-' + size + 'x' + size + '.png');
-    });
-  });
-
-  jimp.read(paths.build + paths.images + '/templates/win-tile-icon-310x150-template.png', function (err, img) {
-    if (err) throw err;
-    img.resize(size, size).write(paths.build + paths.images + '/win-tile-icon-310x150.png');
-  });
-
-}
-
-function generateChromeIcons() {
-
-  // TODO: Generate icons and manifest file.
+  return Promise.all(promises);
 
 }
 
 // Tasks
 
-gulp.task('clean', function () {
+// setup
+// *****
+// 1. Deletes current dist directory.
+// 2. Creates a fresh dist directory.
+// 3. Clones the build directory contents to dist directory.
+// 4. Removes ignored files from dist directory.
+gulp.task('_setup', function () {
 
-  return gulp
-  .src(paths.dist, {read: false})
-  .pipe(clean());
+  // Ignore paths are relative paths so we need to
+  // prepend the distribution directory's path
+  // to all ignore paths.
+  var ignorePaths = cfg.ignore.map(function (val) {
+    return cfg.dist + val;
+  });
+
+  fs.removeSync(cfg.dist);
+  fs.copySync(cfg.build, cfg.dist);
+  return del(ignorePaths);
 
 });
 
-gulp.task('setup', function (cb) {
-
-  fs.copySync(paths.build + paths.images, paths.dist + paths.images);
-  fs.copySync(paths.build + paths.fonts, paths.dist + paths.fonts);
-  fs.ensureDirSync(paths.dist + paths.scripts);
-  fs.ensureDirSync(paths.dist + paths.styles);
-  cb();
-
-});
-
-gulp.task('sass', function () {
+// sass
+// ****
+// Compile Sass files in build folder to css files
+// and place them to dist folder.
+gulp.task('_sass', function () {
 
   return gulp
-  .src(paths.build + paths.styles + '/**/*.scss')
+  .src(cfg.build + cfg.sass_root + '/**/*.scss')
   .pipe(foreach(function (stream, file) {
-    var fileName = path.basename(file.path);
-    return stream
-    .pipe(sass({
-      outputStyle: 'compressed',
-      outFile: fileName.substr(0, fileName.lastIndexOf('.')) + '.css'
+    var outFile = path.basename(file.path);
+    outFile = outFile.substr(0, outFile.lastIndexOf('.')) + '.css';
+    return stream.pipe(sass({
+      outputStyle: 'compact',
+      outFile: outFile
     }));
   }))
-  .pipe(gulp.dest(paths.dist + paths.styles));
+  .pipe(gulp.dest(cfg.dist + cfg.sass_root));
 
 });
 
-gulp.task('build', function() {
+// templates-scripts
+// *****************
+// 1. Compile all swig templates into publishable html files.
+// 2. Concatenate and minify scripts based on the markers in the swig templates.
+// 3. Prettify html files.
+// 4. Move the compiled templates and scripts to dist folder.
+gulp.task('_templates-scripts', function() {
 
   return gulp
-  .src(paths.build + '/**/[^_]*.html')
+  .src(cfg.build + '/**/[^_]*.html')
   .pipe(data(getTemplateData))
   .pipe(swig())
   .pipe(useref())
@@ -143,15 +142,32 @@ gulp.task('build', function() {
   .pipe(gulpif('*.html', prettify({
     indent_size: 2
   })))
-  .pipe(gulp.dest(paths.dist));
+  .pipe(gulp.dest(cfg.dist));
 
 });
 
-gulp.task('rev', function() {
+// images
+// ******
+// Create resized versions of all configured images.
+gulp.task('_images', function (cb) {
+
+  generateImages().then(function () {
+    cb();
+  }, function (err) {
+    cb(err);
+  });
+
+});
+
+// rev
+// ***
+// Cache bust static files.
+gulp.task('_rev', function() {
 
   return gulp
-  .src(paths.dist + '/**/*.html')
+  .src(cfg.dist + '/**/*.html')
   .pipe(reveasy({
+    base: cfg.dist,
     elementAttributes: {
       js: {
         name: 'script',
@@ -171,14 +187,45 @@ gulp.task('rev', function() {
       }
     }
   }))
-  .pipe(gulp.dest(paths.dist));
+  .pipe(gulp.dest(cfg.dist));
 
 });
 
+// init
+// ****
+// Clone build folder and drudge.json file from the module root to the app root.
+gulp.task('init', function (cb) {
+
+  // If build folder does not exist already in the current project let's copy it there.
+  if (!pathExists(cfg.build)) {
+    fs.copySync(projectRoot + '/build', cfg.build);
+  }
+
+  // If drudge.json config file does not exist already in the current project let's copy it there.
+  if (!pathExists(appRoot + '/drudge.json')) {
+    fs.copySync(projectRoot + '/drudge.json', appRoot + '/drudge.json');
+  }
+
+  cb();
+
+});
+
+// build
+// *****
+// As the name implies, execute all the stages needed for creating a working static site.
+gulp.task('build', function (cb) {
+
+  sequence('_setup', '_sass', '_templates-scripts', '_images', '_rev')(cb);
+
+});
+
+// server
+// ******
+// Fire up a test server.
 gulp.task('server', function () {
 
   var app = express();
-  app.use(express.static(paths.dist));
+  app.use(express.static(cfg.dist));
   var chain = Promise.resolve().then(startApp);
 
   function startApp() {
@@ -200,14 +247,14 @@ gulp.task('server', function () {
   function rebuildApp(instance) {
 
     return new Promise(function (res) {
-      sequence('default')(function () {
+      sequence('build')(function () {
         res(instance);
       });
     });
 
   }
 
-  gulp.watch(paths.build + '/**/*', function () {
+  gulp.watch(cfg.build + '/**/*', function () {
 
     chain = chain.then(stopApp).then(rebuildApp).then(startApp);
 
@@ -215,33 +262,12 @@ gulp.task('server', function () {
 
 });
 
-gulp.task('install', function (cb) {
-
-  // If build folder exists already let's only update the _base.html file.
-  if (pathExists(paths.build)) {
-    fs.copySync(projectRoot + '/_base.html', paths.build + '/_base.html');
-  }
-  // If build folder does not exist let's copy it from project to the specified destination.
-  else {
-    fs.copySync(paths.build + paths.fonts, paths.build);
-  }
-
-  cb();
-
-});
-
-gulp.task('default', function (cb) {
-
-  sequence('clean', 'setup', 'sass', 'build', 'rev')(cb);
-
-});
-
 // Module API
 
 module.exports = {
-  install: function () {
+  init: function () {
     return new Promise(function (res) {
-      sequence('install')(res);
+      sequence('init')(res);
     });
   },
   build: function () {
