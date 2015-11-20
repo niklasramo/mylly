@@ -15,7 +15,9 @@ var gulpif = require('gulp-if');
 var sequence = require('gulp-sequence');
 var prettify = require('gulp-prettify');
 var foreach = require('gulp-foreach');
-var reveasy = require('gulp-rev-easy');
+var revAll = require('gulp-rev-all');
+var jscs = require('gulp-jscs');
+var jsValidate = require('gulp-jsvalidate');
 var jimp = require('jimp');
 
 // Root paths
@@ -86,7 +88,7 @@ function generateImages() {
 
 // setup
 // *****
-// 1. Deletes current dist directory.
+// 1. Deletes current dist (and potential temporary dist) directory.
 // 2. Creates a fresh dist directory.
 // 3. Clones the build directory contents to dist directory.
 // 4. Removes ignored files from dist directory.
@@ -100,8 +102,38 @@ gulp.task('_setup', function () {
   });
 
   fs.removeSync(cfg.dist);
+  fs.removeSync(cfg.dist + '_tmp');
   fs.copySync(cfg.build, cfg.dist);
   return del(ignorePaths);
+
+});
+
+// validate-js
+// ***********
+// Check all JavaScript files for syntax errors.
+gulp.task('_validate-js', function () {
+
+  return gulp
+  .src(cfg.build + '/**/*.js')
+  .pipe(jsValidate());
+
+});
+
+// jscs
+// ****
+// Make sure that JavaScript files are written in correct style.
+gulp.task('_jscs', function (cb) {
+
+  if (typeof cfg.jscs === 'object' && cfg.jscs.source) {
+    console.log(cfg.jscs.configPath);
+    return gulp
+    .src(cfg.build + cfg.jscs.source)
+    .pipe(jscs({configPath: cfg.jscs.configPath}))
+    .pipe(jscs.reporter());
+  }
+  else {
+    cb();
+  }
 
 });
 
@@ -127,7 +159,7 @@ gulp.task('_sass', function () {
 
 // templates-scripts
 // *****************
-// 1. Compile all swig templates into publishable html files.
+// 1. Compile all swig templates into static html files.
 // 2. Concatenate and minify scripts based on the markers in the swig templates.
 // 3. Prettify html files.
 // 4. Move the compiled templates and scripts to dist folder.
@@ -165,29 +197,20 @@ gulp.task('_images', function (cb) {
 gulp.task('_rev', function() {
 
   return gulp
-  .src(cfg.dist + '/**/*.html')
-  .pipe(reveasy({
-    base: cfg.dist,
-    elementAttributes: {
-      js: {
-        name: 'script',
-        src: 'src'
-      },
-      css: {
-        name: 'link[type="text/css"]',
-        src: 'href'
-      },
-      favicon: {
-        name: 'link[type="image/png"]',
-        src: 'href'
-      },
-      img:{
-        name: 'img',
-        src : 'src'
-      }
-    }
-  }))
-  .pipe(gulp.dest(cfg.dist));
+  .src(cfg.dist + '/**')
+  .pipe(new revAll({dontRenameFile: ['.html', '.xml', '.json']}).revision())
+  .pipe(gulp.dest(cfg.dist + '_tmp'));
+
+});
+
+// finalize
+// ********
+// Replace dist folder with temporary dist folder.
+gulp.task('_finalize', function (cb) {
+
+  fs.removeSync(cfg.dist);
+  fs.renameSync(cfg.dist + '_tmp', cfg.dist);
+  cb();
 
 });
 
@@ -215,7 +238,7 @@ gulp.task('init', function (cb) {
 // As the name implies, execute all the stages needed for creating a working static site.
 gulp.task('build', function (cb) {
 
-  sequence('_setup', '_sass', '_templates-scripts', '_images', '_rev')(cb);
+  sequence('_setup', '_validate-js', '_jscs', '_sass', '_templates-scripts', '_images', '_rev', '_finalize')(cb);
 
 });
 
@@ -231,7 +254,7 @@ gulp.task('server', function () {
   function startApp() {
 
     return new Promise(function (res) {
-      var inst = app.listen(4000, function () {
+      var inst = app.listen(cfg.serverPort, function () {
         res(inst);
       });
     });

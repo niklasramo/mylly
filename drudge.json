@@ -6,7 +6,8 @@
     "/static/scripts/**/*",
     "/static/styles/**/*",
     "/**/*.ctx.json",
-    "/**/[_]*.html"
+    "/**/[_]*.html",
+    "/.jscsrc"
   ],
   "sass_root": "",
   "resize_images": [
@@ -26,7 +27,11 @@
       "target": "/static/images/tile-{{ width }}x{{ height }}.png"
     }
   ],
-  "optimize_images": true,
+  "jscs": {
+    "source": "/static/scripts/*.js",
+    "configPath": "./build/.jscsrc"
+  },
+  "serverPort": 4000,
   "config": {
     "site_url": "",
     "site_name": "My website",
