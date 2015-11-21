@@ -2,10 +2,29 @@
 
 A simple (and opinionated) static site generator for Node.js.
 
-* Complies your Sass stylesheets to CSS.
-* Validates, concatenates and minifies JavaScript files.
-* Compile Swig templates into static HTML. You can easily provide data for each Swig template using JSON files.
-* Creates resized and optimized png/jpg files from provided source files.
+**Features**
+
+* Compiles [Swig](http://paularmstrong.github.io/swig/) templates to static HTML files. Data can be passed to Swig templates easily via JSON files.
+* Complies [Sass](http://sass-lang.com/) stylesheets to static CSS files.
+* Concatenates and minifies JavaScript files.
+* Checks JavaScript files for syntax errors with [Esprima](http://esprima.org/).
+* Creates resized images from provided source files.
+* Enforces your code style conventions with [jscs](http://jscs.info/).
+* Beautifies HTML files.
+* Revisions files (that you choose) automatically (cache busting).
+* Provides a local development server that watches the build directory for changes. Whenever something is changed drudge reruns the build process and restarts the server.
+
+**Coming up...**
+
+* Live reload.
+* Automatic markdown parsing.
+* Sass linting.
+* JavaScript linting.
+* HTML5 validation.
+* Image optimization.
+* Build process event hooks.
+* Development and production mode.
+* Smart revisioning: revision only files which have changed.
 
 **Install**
 
@@ -16,7 +35,7 @@ A simple (and opinionated) static site generator for Node.js.
 ```javascript
 var drudge = require('drudge');
 
-// Create initial build folder and default drudge.json configuration file
+// Create initial build folder and drudge.json configuration file
 drudge.init();
 
 // Build the contents of build folder into dist folder
@@ -31,54 +50,6 @@ drudge.server();
 Drudge allows you to configure a lot of things via the `drudge.json` file. When you call `drudge.init()` the default config file is imported to your project's root. You can modify the file as you wish for your project. Below is the default configuration.
 
 ```javascript
-{
-  "build": "./build",
-  "dist": "./dist",
-  "ignore": [
-    "/static/images/templates",
-    "/static/scripts/**/*",
-    "/static/styles/**/*",
-    "/**/*.ctx.json",
-    "/**/[_]*.html",
-    "/.jscsrc"
-  ],
-  "sass_root": "",
-  "resize_images": [
-    {
-      "source": "/static/images/templates/icon.png",
-      "sizes": [[192, 192], [180, 180], [152, 152], [144, 144], [120, 120], [114, 114], [76, 76], [72, 72], [57, 57]],
-      "target": "/static/images/icon-{{ width }}x{{ height }}.png"
-    },
-    {
-      "source": "/static/images/templates/tile.png",
-      "sizes": [[310, 310], [150, 150], [70, 70]],
-      "target": "/static/images/tile-{{ width }}x{{ height }}.png"
-    },
-    {
-      "source": "/static/images/templates/tile-wide.png",
-      "sizes": [[310, 150]],
-      "target": "/static/images/tile-{{ width }}x{{ height }}.png"
-    }
-  ],
-  "jscs": {
-    "source": "/static/scripts/*.js",
-    "configPath": "./build/.jscsrc"
-  },
-  "serverPort": 4000,
-  "config": {
-    "site_url": "",
-    "site_name": "My website",
-    "site_description": "My website description",
-    "site_version": "0.0.1",
-    "site_author": "",
-    "google_analytics_ua": "",
-    "tile_color": "#ffffff",
-    "static_path": "/static",
-    "styles_path": "/static/styles",
-    "scripts_path": "/static/scripts",
-    "images_path": "/static/images"
-  }
-}
 ```
 
 ## License

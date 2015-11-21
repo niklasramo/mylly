@@ -19,20 +19,16 @@ var revAll = require('gulp-rev-all');
 var jscs = require('gulp-jscs');
 var jsValidate = require('gulp-jsvalidate');
 var jimp = require('jimp');
+var browserSync = require('browser-sync').create();
 
 // Root paths
 
 var appRoot = require('app-root-path');
 var projectRoot = __dirname;
 
-// Package data
-
-var pkg = getFileData(projectRoot + '/package.json');
-
 // Drudge config
 
 var cfg = _.assign({}, getFileData(projectRoot + '/drudge.json'), getFileData(appRoot + '/drudge.json')) || {};
-var tplCoreData = {config: typeof cfg.config === 'object' ? cfg.config : {}};
 
 // Custom helpers
 
@@ -48,6 +44,19 @@ function pathExists(filePath) {
 
 }
 
+function generateSource(root, src) {
+
+  if (typeof src === 'string') {
+    return root + src;
+  }
+  else {
+    return src.map(function (val) {
+      return root + val;
+    });
+  }
+
+}
+
 function getFileData(filePath) {
 
   return pathExists(filePath) ? require(filePath) : {};
@@ -59,18 +68,18 @@ function getTemplateData(file) {
   var filePath = file.path;
   var filePathWithoutSuffix = filePath.substr(0, filePath.lastIndexOf('.'));
   var tplData = getFileData(filePathWithoutSuffix + '.ctx.json');
-  return _.assign({}, tplCoreData, tplData);
+  return _.assign({}, (cfg.templateData || {}), tplData);
 
 }
 
 function generateImages() {
 
   var promises = [];
-  var sets = (cfg.resize_images || []);
+  var sets = (cfg.generateImages || []);
   sets.forEach(function (set) {
     set.sizes.forEach(function (size) {
-      var sourcePath = cfg.build + set.source;
-      var targetPath = cfg.dist + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]);
+      var sourcePath = cfg.buildPath + set.source;
+      var targetPath = cfg.distPath + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]);
       if (!pathExists(targetPath)) {
         var promise = jimp.read(sourcePath).then(function (img) {
           return img.resize(size[0], size[1]).write(targetPath);
@@ -94,17 +103,10 @@ function generateImages() {
 // 4. Removes ignored files from dist directory.
 gulp.task('_setup', function () {
 
-  // Ignore paths are relative paths so we need to
-  // prepend the distribution directory's path
-  // to all ignore paths.
-  var ignorePaths = cfg.ignore.map(function (val) {
-    return cfg.dist + val;
-  });
-
-  fs.removeSync(cfg.dist);
-  fs.removeSync(cfg.dist + '_tmp');
-  fs.copySync(cfg.build, cfg.dist);
-  return del(ignorePaths);
+  fs.removeSync(cfg.distPath);
+  fs.removeSync(cfg.distPath + '_tmp');
+  fs.copySync(cfg.buildPath, cfg.distPath);
+  return del(generateSource(cfg.distPath, cfg.ignore));
 
 });
 
@@ -114,7 +116,7 @@ gulp.task('_setup', function () {
 gulp.task('_validate-js', function () {
 
   return gulp
-  .src(cfg.build + '/**/*.js')
+  .src(cfg.buildPath + '/**/*.js')
   .pipe(jsValidate());
 
 });
@@ -125,9 +127,8 @@ gulp.task('_validate-js', function () {
 gulp.task('_jscs', function (cb) {
 
   if (typeof cfg.jscs === 'object' && cfg.jscs.source) {
-    console.log(cfg.jscs.configPath);
     return gulp
-    .src(cfg.build + cfg.jscs.source)
+    .src(generateSource(cfg.buildPath, cfg.jscs.source))
     .pipe(jscs({configPath: cfg.jscs.configPath}))
     .pipe(jscs.reporter());
   }
@@ -143,38 +144,36 @@ gulp.task('_jscs', function (cb) {
 // and place them to dist folder.
 gulp.task('_sass', function () {
 
+  var sassOptions = cfg.sass.options || {};
   return gulp
-  .src(cfg.build + cfg.sass_root + '/**/*.scss')
+  .src(generateSource(cfg.buildPath, cfg.sass.source))
   .pipe(foreach(function (stream, file) {
     var outFile = path.basename(file.path);
     outFile = outFile.substr(0, outFile.lastIndexOf('.')) + '.css';
-    return stream.pipe(sass({
-      outputStyle: 'compact',
-      outFile: outFile
-    }));
+    sassOptions.outFile = sassOptions.outFile || outFile;
+    sassOptions.outputStyle = sassOptions.outputStyle || 'compact';
+    return stream.pipe(sass(sassOptions));
   }))
-  .pipe(gulp.dest(cfg.dist + cfg.sass_root));
+  .pipe(gulp.dest(cfg.distPath + cfg.sass.destination));
 
 });
 
-// templates-scripts
-// *****************
+// templates
+// *********
 // 1. Compile all swig templates into static html files.
 // 2. Concatenate and minify scripts based on the markers in the swig templates.
 // 3. Prettify html files.
 // 4. Move the compiled templates and scripts to dist folder.
-gulp.task('_templates-scripts', function() {
+gulp.task('_templates', function() {
 
   return gulp
-  .src(cfg.build + '/**/[^_]*.html')
+  .src(generateSource(cfg.buildPath, cfg.templates.source))
   .pipe(data(getTemplateData))
   .pipe(swig())
   .pipe(useref())
-  .pipe(gulpif('*.js', uglify()))
-  .pipe(gulpif('*.html', prettify({
-    indent_size: 2
-  })))
-  .pipe(gulp.dest(cfg.dist));
+  .pipe(gulpif('*.js', uglify(cfg.uglifyOptions || {})))
+  .pipe(gulpif('*.html', prettify(cfg.prettifyOptions || {})))
+  .pipe(gulp.dest(cfg.distPath + cfg.templates.destination));
 
 });
 
@@ -197,9 +196,9 @@ gulp.task('_images', function (cb) {
 gulp.task('_rev', function() {
 
   return gulp
-  .src(cfg.dist + '/**')
+  .src(cfg.distPath + '/**')
   .pipe(new revAll({dontRenameFile: ['.html', '.xml', '.json']}).revision())
-  .pipe(gulp.dest(cfg.dist + '_tmp'));
+  .pipe(gulp.dest(cfg.distPath + '_tmp'));
 
 });
 
@@ -208,8 +207,8 @@ gulp.task('_rev', function() {
 // Replace dist folder with temporary dist folder.
 gulp.task('_finalize', function (cb) {
 
-  fs.removeSync(cfg.dist);
-  fs.renameSync(cfg.dist + '_tmp', cfg.dist);
+  fs.removeSync(cfg.distPath);
+  fs.renameSync(cfg.distPath + '_tmp', cfg.distPath);
   cb();
 
 });
@@ -220,8 +219,8 @@ gulp.task('_finalize', function (cb) {
 gulp.task('init', function (cb) {
 
   // If build folder does not exist already in the current project let's copy it there.
-  if (!pathExists(cfg.build)) {
-    fs.copySync(projectRoot + '/build', cfg.build);
+  if (!pathExists(cfg.buildPath)) {
+    fs.copySync(projectRoot + '/build', cfg.buildPath);
   }
 
   // If drudge.json config file does not exist already in the current project let's copy it there.
@@ -233,55 +232,34 @@ gulp.task('init', function (cb) {
 
 });
 
+// reload
+// ******
+// Helper task for browserSync to run build task before reloading the browsers.
+gulp.task('_reload', function (cb) {
+
+  sequence('build')(function () {
+    browserSync.reload();
+    cb();
+  });
+
+});
+
 // build
 // *****
 // As the name implies, execute all the stages needed for creating a working static site.
 gulp.task('build', function (cb) {
 
-  sequence('_setup', '_validate-js', '_jscs', '_sass', '_templates-scripts', '_images', '_rev', '_finalize')(cb);
+  sequence('_setup', '_validate-js', '_jscs', '_sass', '_templates', '_images', '_rev', '_finalize')(cb);
 
 });
 
-// server
-// ******
-// Fire up a test server.
-gulp.task('server', function () {
+// serve
+// *****
+// Start up a local development server.
+gulp.task('serve', ['build'], function () {
 
-  var app = express();
-  app.use(express.static(cfg.dist));
-  var chain = Promise.resolve().then(startApp);
-
-  function startApp() {
-
-    return new Promise(function (res) {
-      var inst = app.listen(cfg.serverPort, function () {
-        res(inst);
-      });
-    });
-
-  }
-
-  function stopApp(instance) {
-
-    return instance.close();
-
-  }
-
-  function rebuildApp(instance) {
-
-    return new Promise(function (res) {
-      sequence('build')(function () {
-        res(instance);
-      });
-    });
-
-  }
-
-  gulp.watch(cfg.build + '/**/*', function () {
-
-    chain = chain.then(stopApp).then(rebuildApp).then(startApp);
-
-  });
+  browserSync.init(cfg.browserSync.options);
+  gulp.watch(cfg.browserSync.watchSource, ['_reload']);
 
 });
 
@@ -298,9 +276,9 @@ module.exports = {
       sequence('build')(res);
     });
   },
-  server: function () {
+  serve: function () {
     return new Promise(function (res) {
-      sequence('server')(res);
+      sequence('serve')(res);
     });
   }
 };

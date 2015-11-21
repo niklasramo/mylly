@@ -1,16 +1,26 @@
 {
-  "build": "./build",
-  "dist": "./dist",
-  "ignore": [
-    "/static/images/templates",
-    "/static/scripts/**/*",
-    "/static/styles/**/*",
-    "/**/*.ctx.json",
-    "/**/[_]*.html",
-    "/.jscsrc"
-  ],
-  "sass_root": "",
-  "resize_images": [
+  "buildPath": "./build",
+  "distPath": "./dist",
+  "templates": {
+    "source": "/**/[^_]*.html",
+    "destination": ""
+  },
+  "sass": {
+    "source": "/**/*.scss",
+    "destination": "",
+    "options": {
+      "outputStyle": "compact"
+    }
+  },
+  "jscs": {
+    "source": "/static/scripts/*.js",
+    "configPath": "./build/.jscsrc"
+  },
+  "uglifyOptions": {},
+  "prettifyOptions": {
+    "indent_size": 2
+  },
+  "generateImages": [
     {
       "source": "/static/images/templates/icon.png",
       "sizes": [[192, 192], [180, 180], [152, 152], [144, 144], [120, 120], [114, 114], [76, 76], [72, 72], [57, 57]],
@@ -27,22 +37,35 @@
       "target": "/static/images/tile-{{ width }}x{{ height }}.png"
     }
   ],
-  "jscs": {
-    "source": "/static/scripts/*.js",
-    "configPath": "./build/.jscsrc"
+  "browserSync": {
+    "watchSource": "./build/**/*",
+    "options": {
+      "server": {
+        "baseDir": "./dist"
+      },
+      "reloadOnRestart": true,
+      "injectChanges": false
+    }
   },
-  "serverPort": 4000,
-  "config": {
-    "site_url": "",
-    "site_name": "My website",
-    "site_description": "My website description",
-    "site_version": "0.0.1",
-    "site_author": "",
-    "google_analytics_ua": "",
-    "tile_color": "#ffffff",
-    "static_path": "/static",
-    "styles_path": "/static/styles",
-    "scripts_path": "/static/scripts",
-    "images_path": "/static/images"
+  "ignore": [
+    "/static/images/templates",
+    "/static/scripts/**/*",
+    "/static/styles/**/*",
+    "/**/*.ctx.json",
+    "/**/[_]*.html",
+    "/.jscsrc"
+  ],
+  "templateData": {
+    "siteUrl": "",
+    "siteName": "My website",
+    "siteDescription": "My website description",
+    "siteVersion": "0.0.1",
+    "siteAuthor": "",
+    "googleAnalyticsUa": "",
+    "tileColor": "#ffffff",
+    "staticPath": "/static",
+    "stylesPath": "/static/styles",
+    "scriptsPath": "/static/scripts",
+    "imagesPath": "/static/images"
   }
 }
