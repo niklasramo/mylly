@@ -1,25 +1,25 @@
 // Modules
 
+var _ = require('lodash');
 var fs = require('fs-extra');
 var path = require('path');
 var del = require('del');
-var _ = require('lodash');
-var express = require('express');
+var htmlMinifier = require('html-minifier').minify;
+var nunjucks = require('nunjucks');
+var jimp = require('jimp');
+var browserSync = require('browser-sync').create();
 var gulp = require('gulp');
 var sass = require('gulp-sass');
 var uglify = require('gulp-uglify');
-var data = require('gulp-data');
-var swig = require('gulp-swig');
 var useref = require('gulp-useref');
 var gulpif = require('gulp-if');
 var sequence = require('gulp-sequence');
-var prettify = require('gulp-prettify');
 var foreach = require('gulp-foreach');
 var revAll = require('gulp-rev-all');
 var jscs = require('gulp-jscs');
+var change = require('gulp-change');
 var jsValidate = require('gulp-jsvalidate');
-var jimp = require('jimp');
-var browserSync = require('browser-sync').create();
+var imagemin = require('gulp-imagemin');
 
 // Root paths
 
@@ -54,6 +54,20 @@ function generateSource(root, src) {
       return root + val;
     });
   }
+
+}
+
+function nunjucksRender(content) {
+
+  var file = this.file;
+  nunjucks.configure(cfg.buildPath, {autoescape: true});
+  return nunjucks.render(path.relative(cfg.buildPath, file.path), getTemplateData(file));
+
+}
+
+function minifyHtml(content) {
+
+  return htmlMinifier(content, cfg.htmlMinifierOptions);
 
 }
 
@@ -144,10 +158,10 @@ gulp.task('_jscs', function (cb) {
 // and place them to dist folder.
 gulp.task('_sass', function () {
 
-  var sassOptions = cfg.sass.options || {};
   return gulp
   .src(generateSource(cfg.buildPath, cfg.sass.source))
   .pipe(foreach(function (stream, file) {
+    var sassOptions = cfg.sass.options || {};
     var outFile = path.basename(file.path);
     outFile = outFile.substr(0, outFile.lastIndexOf('.')) + '.css';
     sassOptions.outFile = sassOptions.outFile || outFile;
@@ -160,19 +174,18 @@ gulp.task('_sass', function () {
 
 // templates
 // *********
-// 1. Compile all swig templates into static html files.
-// 2. Concatenate and minify scripts based on the markers in the swig templates.
+// 1. Compile Nunjucks templates into static html files.
+// 2. Concatenate and minify scripts based on the markers in the templates.
 // 3. Prettify html files.
 // 4. Move the compiled templates and scripts to dist folder.
 gulp.task('_templates', function() {
 
   return gulp
   .src(generateSource(cfg.buildPath, cfg.templates.source))
-  .pipe(data(getTemplateData))
-  .pipe(swig())
+  .pipe(change(nunjucksRender))
   .pipe(useref())
   .pipe(gulpif('*.js', uglify(cfg.uglifyOptions || {})))
-  .pipe(gulpif('*.html', prettify(cfg.prettifyOptions || {})))
+  .pipe(gulpif('*.html', change(minifyHtml)))
   .pipe(gulp.dest(cfg.distPath + cfg.templates.destination));
 
 });
@@ -180,13 +193,25 @@ gulp.task('_templates', function() {
 // images
 // ******
 // Create resized versions of all configured images.
-gulp.task('_images', function (cb) {
+gulp.task('_generate-images', function (cb) {
 
   generateImages().then(function () {
     cb();
   }, function (err) {
     cb(err);
   });
+
+});
+
+// optimize-images
+// ***************
+// Make sure images are as compressed as they can be.
+gulp.task('_optimize-images', function () {
+
+  return gulp
+  .src(generateSource(cfg.distPath, cfg.imagemin.source))
+  .pipe(imagemin(cfg.imagemin.options || {}))
+  .pipe(gulp.dest(cfg.distPath + cfg.imagemin.destination));
 
 });
 
@@ -249,14 +274,14 @@ gulp.task('_reload', function (cb) {
 // As the name implies, execute all the stages needed for creating a working static site.
 gulp.task('build', function (cb) {
 
-  sequence('_setup', '_validate-js', '_jscs', '_sass', '_templates', '_images', '_rev', '_finalize')(cb);
+  sequence('_setup', '_validate-js', '_jscs', '_sass', '_templates', '_generate-images', '_optimize-images', '_rev', '_finalize')(cb);
 
 });
 
 // serve
 // *****
 // Start up a local development server.
-gulp.task('serve', ['build'], function () {
+gulp.task('server', ['build'], function () {
 
   browserSync.init(cfg.browserSync.options);
   gulp.watch(cfg.browserSync.watchSource, ['_reload']);
@@ -276,9 +301,9 @@ module.exports = {
       sequence('build')(res);
     });
   },
-  serve: function () {
+  server: function () {
     return new Promise(function (res) {
-      sequence('serve')(res);
+      sequence('server')(res);
     });
   }
 };

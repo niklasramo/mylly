@@ -17,8 +17,8 @@
     "configPath": "./build/.jscsrc"
   },
   "uglifyOptions": {},
-  "prettifyOptions": {
-    "indent_size": 2
+  "htmlMinifierOptions": {
+    "collapseWhitespace": true
   },
   "generateImages": [
     {
@@ -37,6 +37,11 @@
       "target": "/static/images/tile-{{ width }}x{{ height }}.png"
     }
   ],
+  "imagemin": {
+    "source": ["/**/*.png", "/**/*.jpg", "/**/*.gif", "/**/*.svg"],
+    "destination": "",
+    "options": {}
+  },
   "browserSync": {
     "watchSource": "./build/**/*",
     "options": {
@@ -52,7 +57,7 @@
     "/static/scripts/**/*",
     "/static/styles/**/*",
     "/**/*.ctx.json",
-    "/**/[_]*.html",
+    "/**/*.html",
     "/.jscsrc"
   ],
   "templateData": {

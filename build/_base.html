@@ -1,19 +1,19 @@
 <!DOCTYPE html>
-<html class="{% block html-class %}{% endblock %}">
+<html class="{% block html_class %}{% endblock %}">
   <head>
     {% block head %}
       <meta charset="utf-8">
-      <title>{% block meta-title %}{{ siteName }}{% endblock %}</title>
-      <meta name="description" content="{% block meta-description %}{{ site_description }}{% endblock %}">
-      <meta name="viewport" content="{% block meta-viewport %}width=device-width, initial-scale=1.0, user-scalable=yes{% endblock %}">
+      <title>{% block meta_title %}{{ siteName }}{% endblock %}</title>
+      <meta name="description" content="{% block meta_description %}{{ site_description }}{% endblock %}">
+      <meta name="viewport" content="{% block meta_viewport %}width=device-width, initial-scale=1.0, user-scalable=yes{% endblock %}">
       <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
       <meta http-equiv="cleartype" content="on">
-      <link rel="canonical" href="{% block meta-canonical %}{% if page_path %}{{ siteUrl }}{{ pagePath }}{% endif %}{% endblock %}">
-      {% block meta-og %}
+      <link rel="canonical" href="{% block meta_canonical %}{% if page_path %}{{ siteUrl }}{{ pagePath }}{% endif %}{% endblock %}">
+      {% block meta_og %}
         <meta property="og:site_name" content="{{ siteName }}">
         <meta property="og:type" content="website">
-        <meta property="og:image" content="{% block meta-og-image %}{{ siteUrl }}{{ imagesPath }}/open-graph.png{% endblock %}">
-        <meta property="og:url" content="{% block meta-og-url %}{% if page_path %}{{ siteUrl }}{{ pagePath }}{% endif %}{% endblock %}">
+        <meta property="og:image" content="{% block meta_og_image %}{{ siteUrl }}{{ imagesPath }}/open-graph.png{% endblock %}">
+        <meta property="og:url" content="{% block meta_og_url %}{% if page_path %}{{ siteUrl }}{{ pagePath }}{% endif %}{% endblock %}">
       {% endblock %}
       {# Android chrome web app config #}
       <meta name="application-name" content="{{ siteName }}">
@@ -43,10 +43,10 @@
         <script src="{{ scriptsPath }}/head.js"></script>
         <!-- endbuild -->
       {% endblock %}
-      {% block head-extra %}{% endblock %}
+      {% block head_extra %}{% endblock %}
     {% endblock %}
   </head>
-  <body class="{% block body-class %}{% endblock %}">
+  <body class="{% block body_class %}{% endblock %}">
     {% block body %}
       {% block main %}{% endblock %}
       {% if googleAnalyticsUa %}
@@ -59,7 +59,7 @@
           ga('send', 'pageview');
         </script>
       {% endif %}
-      {% block scripts-body %}
+      {% block scripts_body %}
         <!-- build:js {{ scriptsPath }}/base-body.js -->
         <script src="{{ scriptsPath }}/body.js"></script>
         <!-- endbuild -->

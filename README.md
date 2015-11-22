@@ -4,27 +4,25 @@ A simple (and opinionated) static site generator for Node.js.
 
 **Features**
 
-* Compiles [Swig](http://paularmstrong.github.io/swig/) templates to static HTML files. Data can be passed to Swig templates easily via JSON files.
+* Compiles [Nunjucks](https://mozilla.github.io/nunjucks/) templates to static minified HTML files. Data can be passed to Swig templates easily via JSON files.
 * Complies [Sass](http://sass-lang.com/) stylesheets to static CSS files.
 * Concatenates and minifies JavaScript files.
 * Checks JavaScript files for syntax errors with [Esprima](http://esprima.org/).
 * Creates resized images from provided source files.
+* Optimizes image files (png/jpg/gif/svg) with.
 * Enforces your code style conventions with [jscs](http://jscs.info/).
-* Beautifies HTML files.
 * Revisions files (that you choose) automatically (cache busting).
-* Provides a local development server that watches the build directory for changes. Whenever something is changed drudge reruns the build process and restarts the server.
+* Integrates with BrowserSync.
 
 **Coming up...**
 
-* Live reload.
-* Automatic markdown parsing.
+* Development and production mode.
+  * Development mode does not minify scripts and html.
+* Smart revisioning: revision only files which have changed.
 * Sass linting.
 * JavaScript linting.
 * HTML5 validation.
-* Image optimization.
-* Build process event hooks.
-* Development and production mode.
-* Smart revisioning: revision only files which have changed.
+* Automatic markdown parsing.
 
 **Install**
 
