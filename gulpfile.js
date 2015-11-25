@@ -1,4 +1,6 @@
+//
 // Modules
+//
 
 var _ = require('lodash');
 var fs = require('fs-extra');
@@ -6,7 +8,10 @@ var path = require('path');
 var del = require('del');
 var htmlMinifier = require('html-minifier').minify;
 var nunjucks = require('nunjucks');
+var nunjucksMarkdown = require('nunjucks-markdown');
+var marked = require('marked');
 var jimp = require('jimp');
+var appRoot = require('app-root-path');
 var browserSync = require('browser-sync').create();
 var gulp = require('gulp');
 var sass = require('gulp-sass');
@@ -19,18 +24,36 @@ var revAll = require('gulp-rev-all');
 var jscs = require('gulp-jscs');
 var change = require('gulp-change');
 var jsValidate = require('gulp-jsvalidate');
+var w3cjs = require('gulp-w3cjs'); // https://www.npmjs.com/package/gulp-htmlhint another alternative/parallel linter.
 var imagemin = require('gulp-imagemin');
 
-// Root paths
+//
+// Setup
+//
 
-var appRoot = require('app-root-path');
+// Get project root path.
 var projectRoot = __dirname;
 
-// Drudge config
+// Get drudge configuration.
+var cfg = _.assign({}, getFileData(projectRoot + '/drudge.config.js'), getFileData(appRoot + '/drudge.config.js')) || {};
 
-var cfg = _.assign({}, getFileData(projectRoot + '/drudge.json'), getFileData(appRoot + '/drudge.json')) || {};
+// Temporary distribution path.
+var tempDistPath = cfg.distPath + '_tmp';
 
+// Setup marked.
+if (_.isPlainObject(cfg.marked)) {
+  marked.setOptions(cfg.marked);
+}
+
+// Set up marked for nunjucks.
+nunjucksMarkdown.register(nunjucks.configure('views'), marked);
+
+// Setup nunjucks.
+nunjucks.configure(cfg.buildPath, _.isPlainObject(cfg.nunjucks) ? cfg.nunjucks : {});
+
+//
 // Custom helpers
+//
 
 function pathExists(filePath) {
 
@@ -46,28 +69,17 @@ function pathExists(filePath) {
 
 function generateSource(root, src) {
 
-  if (typeof src === 'string') {
-    return root + src;
+  if (_.isString(src)) {
+    return [root + src];
   }
-  else {
+  else if (_.isArray(src)) {
     return src.map(function (val) {
       return root + val;
     });
   }
-
-}
-
-function nunjucksRender(content) {
-
-  var file = this.file;
-  nunjucks.configure(cfg.buildPath, {autoescape: true});
-  return nunjucks.render(path.relative(cfg.buildPath, file.path), getTemplateData(file));
-
-}
-
-function minifyHtml(content) {
-
-  return htmlMinifier(content, cfg.htmlMinifierOptions);
+  else {
+    return [];
+  }
 
 }
 
@@ -81,8 +93,44 @@ function getTemplateData(file) {
 
   var filePath = file.path;
   var filePathWithoutSuffix = filePath.substr(0, filePath.lastIndexOf('.'));
-  var tplData = getFileData(filePathWithoutSuffix + '.ctx.json');
-  return _.assign({}, (cfg.templateData || {}), tplData);
+  var tplCoreData = _.isPlainObject(cfg.templateData) ? cfg.templateData : {};
+  var tplJsonData = getFileData(filePathWithoutSuffix + '.ctx.json');
+  var tplJsData = getFileData(filePathWithoutSuffix + '.ctx.js');
+  if (_.isFunction(tplJsData)) {
+    tplJsData = tplJsData(tplCoreData, tplJsonData);
+  }
+  return _.assign({}, tplCoreData, tplJsonData, tplJsData);
+
+}
+
+function nunjucksRender(content) {
+
+  var file = this.file;
+  return nunjucks.render(path.relative(cfg.buildPath, file.path), getTemplateData(file));
+
+}
+
+function minifyHtml(content) {
+
+  return htmlMinifier(content, cfg.htmlMinifier);
+
+}
+
+function uglifyCondition(file) {
+
+  return path.extname(file.path) === '.js' && _.isPlainObject(cfg.uglify);
+
+}
+
+function minifyCondition(file) {
+
+  return path.extname(file.path) === '.html' && _.isPlainObject(cfg.htmlMinifier);
+
+}
+
+function htmlValidateCondition(file) {
+
+  return path.extname(file.path) === '.html' && _.isPlainObject(cfg.w3cjs);
 
 }
 
@@ -107,7 +155,9 @@ function generateImages() {
 
 }
 
+//
 // Tasks
+//
 
 // setup
 // *****
@@ -117,21 +167,27 @@ function generateImages() {
 // 4. Removes ignored files from dist directory.
 gulp.task('_setup', function () {
 
+  var defaultIgnores = generateSource(cfg.distPath, ['/**/*.html', '/**/*.ctx.json', '/**/*.ctx.js']);
   fs.removeSync(cfg.distPath);
-  fs.removeSync(cfg.distPath + '_tmp');
+  fs.removeSync(tempDistPath);
   fs.copySync(cfg.buildPath, cfg.distPath);
-  return del(generateSource(cfg.distPath, cfg.ignore));
+  return del(generateSource(cfg.distPath, cfg.ignore).concat(defaultIgnores));
 
 });
 
 // validate-js
 // ***********
 // Check all JavaScript files for syntax errors.
-gulp.task('_validate-js', function () {
+gulp.task('_validate-js', function (cb) {
 
-  return gulp
-  .src(cfg.buildPath + '/**/*.js')
-  .pipe(jsValidate());
+  if (cfg.validateJs) {
+    return gulp
+    .src(cfg.buildPath + '/**/*.js', {base: cfg.buildPath})
+    .pipe(jsValidate());
+  }
+  else {
+    cb();
+  }
 
 });
 
@@ -140,9 +196,9 @@ gulp.task('_validate-js', function () {
 // Make sure that JavaScript files are written in correct style.
 gulp.task('_jscs', function (cb) {
 
-  if (typeof cfg.jscs === 'object' && cfg.jscs.source) {
+  if (_.isPlainObject(cfg.jscs)) {
     return gulp
-    .src(generateSource(cfg.buildPath, cfg.jscs.source))
+    .src(generateSource(cfg.buildPath, cfg.jscs.files), {base: cfg.buildPath})
     .pipe(jscs({configPath: cfg.jscs.configPath}))
     .pipe(jscs.reporter());
   }
@@ -154,21 +210,23 @@ gulp.task('_jscs', function (cb) {
 
 // sass
 // ****
-// Compile Sass files in build folder to css files
-// and place them to dist folder.
-gulp.task('_sass', function () {
+// Compile Sass stylesheets in build folder to static css files into dist folder.
+gulp.task('_sass', function (cb) {
 
-  return gulp
-  .src(generateSource(cfg.buildPath, cfg.sass.source))
-  .pipe(foreach(function (stream, file) {
-    var sassOptions = cfg.sass.options || {};
-    var outFile = path.basename(file.path);
-    outFile = outFile.substr(0, outFile.lastIndexOf('.')) + '.css';
-    sassOptions.outFile = sassOptions.outFile || outFile;
-    sassOptions.outputStyle = sassOptions.outputStyle || 'compact';
-    return stream.pipe(sass(sassOptions));
-  }))
-  .pipe(gulp.dest(cfg.distPath + cfg.sass.destination));
+  if (_.isPlainObject(cfg.sass)) {
+    return gulp
+    .src(generateSource(cfg.buildPath, ['/**/*.scss', '/**/*.sass']), {base: cfg.buildPath})
+    .pipe(foreach(function (stream, file) {
+      var sassOpts = cfg.sass || {};
+      var outFile = path.basename(file.path);
+      sassOpts.outFile = outFile.substr(0, outFile.lastIndexOf('.')) + '.css';
+      return stream.pipe(sass(sassOpts));
+    }))
+    .pipe(gulp.dest(cfg.distPath));
+  }
+  else {
+    cb();
+  }
 
 });
 
@@ -181,17 +239,19 @@ gulp.task('_sass', function () {
 gulp.task('_templates', function() {
 
   return gulp
-  .src(generateSource(cfg.buildPath, cfg.templates.source))
+  .src(generateSource(cfg.buildPath, '/**/[^_]*.html'), {base: cfg.buildPath})
   .pipe(change(nunjucksRender))
   .pipe(useref())
-  .pipe(gulpif('*.js', uglify(cfg.uglifyOptions || {})))
-  .pipe(gulpif('*.html', change(minifyHtml)))
-  .pipe(gulp.dest(cfg.distPath + cfg.templates.destination));
+  .pipe(gulpif(uglifyCondition, uglify(cfg.uglify)))
+  .pipe(gulpif(minifyCondition, change(minifyHtml)))
+  .pipe(gulpif(htmlValidateCondition, w3cjs(cfg.w3cjs)))
+  .pipe(gulpif(htmlValidateCondition, w3cjs.reporter()))
+  .pipe(gulp.dest(cfg.distPath));
 
 });
 
-// images
-// ******
+// generate-images
+// ***************
 // Create resized versions of all configured images.
 gulp.task('_generate-images', function (cb) {
 
@@ -206,53 +266,44 @@ gulp.task('_generate-images', function (cb) {
 // optimize-images
 // ***************
 // Make sure images are as compressed as they can be.
-gulp.task('_optimize-images', function () {
+gulp.task('_optimize-images', function (cb) {
 
-  return gulp
-  .src(generateSource(cfg.distPath, cfg.imagemin.source))
-  .pipe(imagemin(cfg.imagemin.options || {}))
-  .pipe(gulp.dest(cfg.distPath + cfg.imagemin.destination));
+  if (_.isPlainObject(cfg.imagemin)) {
+    return gulp
+    .src(generateSource(cfg.distPath, cfg.imagemin.files), {base: cfg.distPath})
+    .pipe(imagemin(cfg.imagemin.options))
+    .pipe(gulp.dest(cfg.distPath));
+  }
+  else {
+    cb();
+  }
 
 });
 
 // rev
 // ***
-// Cache bust static files.
-gulp.task('_rev', function() {
+// Revision files.
+gulp.task('_rev', function (cb) {
 
-  return gulp
-  .src(cfg.distPath + '/**')
-  .pipe(new revAll({dontRenameFile: ['.html', '.xml', '.json']}).revision())
-  .pipe(gulp.dest(cfg.distPath + '_tmp'));
+  if (_.isPlainObject(cfg.rev)) {
+    return gulp
+    .src(cfg.distPath + '/**')
+    .pipe(new revAll(cfg.rev).revision())
+    .pipe(gulp.dest(tempDistPath));
+  }
+  else {
+    cb();
+  }
 
 });
 
-// finalize
-// ********
-// Replace dist folder with temporary dist folder.
-gulp.task('_finalize', function (cb) {
+// end
+// ***
+// Clean up temporary distribution folder.
+gulp.task('_end', function (cb) {
 
   fs.removeSync(cfg.distPath);
-  fs.renameSync(cfg.distPath + '_tmp', cfg.distPath);
-  cb();
-
-});
-
-// init
-// ****
-// Clone build folder and drudge.json file from the module root to the app root.
-gulp.task('init', function (cb) {
-
-  // If build folder does not exist already in the current project let's copy it there.
-  if (!pathExists(cfg.buildPath)) {
-    fs.copySync(projectRoot + '/build', cfg.buildPath);
-  }
-
-  // If drudge.json config file does not exist already in the current project let's copy it there.
-  if (!pathExists(appRoot + '/drudge.json')) {
-    fs.copySync(projectRoot + '/drudge.json', appRoot + '/drudge.json');
-  }
-
+  fs.renameSync(tempDistPath, cfg.distPath);
   cb();
 
 });
@@ -269,12 +320,31 @@ gulp.task('_reload', function (cb) {
 
 });
 
+// init
+// ****
+// Clone build folder and drudge.json file from the module root to the app root.
+gulp.task('init', function (cb) {
+
+  // If build folder does not exist already in the current project let's copy it there.
+  if (!pathExists(cfg.buildPath)) {
+    fs.copySync(projectRoot + '/build', cfg.buildPath);
+  }
+
+  // If drudge.json config file does not exist already in the current project let's copy it there.
+  if (!pathExists(appRoot + '/drudge.config.js')) {
+    fs.copySync(projectRoot + '/drudge.config.js', appRoot + '/drudge.config.js');
+  }
+
+  cb();
+
+});
+
 // build
 // *****
 // As the name implies, execute all the stages needed for creating a working static site.
 gulp.task('build', function (cb) {
 
-  sequence('_setup', '_validate-js', '_jscs', '_sass', '_templates', '_generate-images', '_optimize-images', '_rev', '_finalize')(cb);
+  sequence('_setup', '_validate-js', '_jscs', '_sass', '_templates', '_generate-images', '_optimize-images', '_rev', '_end')(cb);
 
 });
 
@@ -284,11 +354,13 @@ gulp.task('build', function (cb) {
 gulp.task('server', ['build'], function () {
 
   browserSync.init(cfg.browserSync.options);
-  gulp.watch(cfg.browserSync.watchSource, ['_reload']);
+  gulp.watch(config.buildPath + '/**/*', ['_reload']);
 
 });
 
-// Module API
+//
+// Exports
+//
 
 module.exports = {
   init: function () {

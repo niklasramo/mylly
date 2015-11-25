@@ -1,61 +1,3 @@
-# drudge
-
-A simple (and opinionated) static site generator for Node.js.
-
-**Features**
-
-* Compiles [Nunjucks](https://mozilla.github.io/nunjucks/) templates to static minified HTML files. Data can be provided for individual templates with JSON and/or JavaScript files using a special naming convention.
-* Parses and compile markdown in Nunjucks templates.
-* Validates compiled HTML files for syntax errors.
-* Compiles [Sass](http://sass-lang.com/) stylesheets to static CSS files.
-* Concatenates and minifies JavaScript files.
-* Validates JavaScript files for syntax errors.
-* Resizes images and optimizes images.
-* Enforces your code style conventions with [jscs](http://jscs.info/).
-* Revisions files.
-* Integrates with BrowserSync.
-
-**Coming up...**
-
-* SASS style checker.
-* Smart revisioning: revision only files which have changed and keep the data from last build stored somewhere.
-* Pluggable. Users should be able to extend Drudge's functionality.
-* Build report which contains possible warnings, file sizes / project size.
-* Automated SEO analysis.
-* Improved page speed optimizations: http://yeoman.io/blog/performance-optimization.html
-* PageSpeed Insights with reporting (https://github.com/addyosmani/psi).
-* Automatic sitemap generation.
-* Orchestrated release flow (a new `deploy` method), which
-  * Bumps the project version.
-  * Updates/generates chagelog.
-  * Tests changes with CI tool of choice.
-  * Commits, tags and pushes changes to github/bitbucket.
-  * Uploads changes to production server with ftp (https://github.com/morris/vinyl-ftp). This is a bonus feature since in many occasions this is a bad idea. This should actually have it's own method.
-
-**Install**
-
-`npm install drudge --save-dev`
-
-**Usage**
-
-```javascript
-var drudge = require('drudge');
-
-// Create initial build folder and drudge.json configuration file
-drudge.init();
-
-// Build the contents of build folder into dist folder
-drudge.build();
-
-// Start up a local development server
-drudge.server();
-```
-
-**Configuration**
-
-Drudge allows you to configure a lot of things via the `drudge.config.js` file. When you call `drudge.init()` the default config file is imported to your project's root. You can modify the file as you wish for your project. Below is the default configuration with some explanations.
-
-```javascript
 var config = {};
 
 // Path to the build directory.
@@ -88,6 +30,11 @@ config.sass = {
 // Set to true to validate all JavaScript files for syntax errors in the build directory.
 // @type {Boolean}
 config.validateJs = true;
+
+// HTML validator configuration. Set to null to disable.
+// https://www.npmjs.com/package/gulp-w3cjs#w3cjs-options
+// @type {Object|Null}
+config.w3cjs = {};
 
 // JSCS configuration. Set to null to disable.
 // @type {Object|Null}
@@ -205,8 +152,3 @@ config.templateData = {
 };
 
 module.exports = config;
-```
-
-## License
-
-Copyright &copy; 2015 Niklas Rämö. Licensed under **[the MIT license](LICENSE.md)**.
