@@ -1,3 +1,29 @@
+// TODO
+// ----
+// * Split build process intro phases.
+//   * Pre-build:
+//     * Lint JavaScript and SASS files.
+//   * Build:
+//     * Prepare the dist directory (remove dist dir -> clone src dir -> clean dist dir)
+//     * Compile SASS files, scripts and templates.
+//     * Resize/optimize images.
+//     * Concatenate and minify scripts.
+//     * Generate sitemap.
+//     * Remove unused CSS styles.
+//     * TODO: Generate multisize favicon.ico (16+24+32+48).
+//     * Revision files.
+//   * Post-build:
+//     * Validate HTML/XML files.
+//     * TODO: Validate minified JavaScript for syntax errors.
+//     * TODO: Validate minified CSS files for syntax errors.
+//     * TODO: Generate build report (Page per page and/or whole project).
+//       * TODO: SEO analysis.
+//       * TODO: PageSpeed insights.
+//       * TODO: Asset sizes divided to sections (total, markup, styles, scripts, images).
+//       * TODO: Check for broken links.
+// * Optimize server by running only necessary build steps when something changes.
+//
+
 //
 // Modules
 //
@@ -13,8 +39,11 @@ var marked = require('marked');
 var jimp = require('jimp');
 var appRoot = require('app-root-path');
 var browserSync = require('browser-sync').create();
+var yamljs = require('yamljs');
+var through2 = require('through2');
 var gulp = require('gulp');
 var sass = require('gulp-sass');
+var sassLint = require('gulp-sass-lint');
 var uglify = require('gulp-uglify');
 var useref = require('gulp-useref');
 var gulpif = require('gulp-if');
@@ -26,6 +55,8 @@ var change = require('gulp-change');
 var jsValidate = require('gulp-jsvalidate');
 var w3cjs = require('gulp-w3cjs'); // https://www.npmjs.com/package/gulp-htmlhint another alternative/parallel linter.
 var imagemin = require('gulp-imagemin');
+var sitemap = require('gulp-sitemap');
+var uncss = require('gulp-uncss');
 
 //
 // Setup
@@ -34,8 +65,11 @@ var imagemin = require('gulp-imagemin');
 // Get project root path.
 var projectRoot = __dirname;
 
+// Drudge configuration file path (relative).
+var configPath = '/drudge.config.js';
+
 // Get drudge configuration.
-var cfg = _.assign({}, getFileData(projectRoot + '/drudge.config.js'), getFileData(appRoot + '/drudge.config.js')) || {};
+var cfg = _.assign({}, getFileData(projectRoot + configPath), getFileData(appRoot + configPath)) || {};
 
 // Temporary distribution path.
 var tempDistPath = cfg.distPath + '_tmp';
@@ -49,7 +83,7 @@ if (_.isPlainObject(cfg.marked)) {
 nunjucksMarkdown.register(nunjucks.configure('views'), marked);
 
 // Setup nunjucks.
-nunjucks.configure(cfg.buildPath, _.isPlainObject(cfg.nunjucks) ? cfg.nunjucks : {});
+nunjucks.configure(cfg.srcPath, _.isPlainObject(cfg.nunjucks) ? cfg.nunjucks : {});
 
 //
 // Custom helpers
@@ -106,7 +140,7 @@ function getTemplateData(file) {
 function nunjucksRender(content) {
 
   var file = this.file;
-  return nunjucks.render(path.relative(cfg.buildPath, file.path), getTemplateData(file));
+  return nunjucks.render(path.relative(cfg.srcPath, file.path), getTemplateData(file));
 
 }
 
@@ -128,9 +162,14 @@ function minifyCondition(file) {
 
 }
 
-function htmlValidateCondition(file) {
+function w3cjsReporter() {
 
-  return path.extname(file.path) === '.html' && _.isPlainObject(cfg.w3cjs);
+  return through2.obj(function (file, enc, cb) {
+    cb(null, file);
+    if (!file.w3cjs.success) {
+      console.log('HTML validation error(s) found');
+    }
+  });
 
 }
 
@@ -140,7 +179,7 @@ function generateImages() {
   var sets = (cfg.generateImages || []);
   sets.forEach(function (set) {
     set.sizes.forEach(function (size) {
-      var sourcePath = cfg.buildPath + set.source;
+      var sourcePath = cfg.srcPath + set.source;
       var targetPath = cfg.distPath + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]);
       if (!pathExists(targetPath)) {
         var promise = jimp.read(sourcePath).then(function (img) {
@@ -159,30 +198,15 @@ function generateImages() {
 // Tasks
 //
 
-// setup
-// *****
-// 1. Deletes current dist (and potential temporary dist) directory.
-// 2. Creates a fresh dist directory.
-// 3. Clones the build directory contents to dist directory.
-// 4. Removes ignored files from dist directory.
-gulp.task('_setup', function () {
-
-  var defaultIgnores = generateSource(cfg.distPath, ['/**/*.html', '/**/*.ctx.json', '/**/*.ctx.js']);
-  fs.removeSync(cfg.distPath);
-  fs.removeSync(tempDistPath);
-  fs.copySync(cfg.buildPath, cfg.distPath);
-  return del(generateSource(cfg.distPath, cfg.ignore).concat(defaultIgnores));
-
-});
-
 // validate-js
 // ***********
+// Phase: pre-build
 // Check all JavaScript files for syntax errors.
-gulp.task('_validate-js', function (cb) {
+gulp.task('validate-js', function (cb) {
 
   if (cfg.validateJs) {
     return gulp
-    .src(cfg.buildPath + '/**/*.js', {base: cfg.buildPath})
+    .src(cfg.srcPath + '/**/*.js', {base: cfg.srcPath})
     .pipe(jsValidate());
   }
   else {
@@ -191,14 +215,15 @@ gulp.task('_validate-js', function (cb) {
 
 });
 
-// jscs
-// ****
+// lint-js
+// *******
+// Phase: pre-build
 // Make sure that JavaScript files are written in correct style.
-gulp.task('_jscs', function (cb) {
+gulp.task('lint-js', function (cb) {
 
   if (_.isPlainObject(cfg.jscs)) {
     return gulp
-    .src(generateSource(cfg.buildPath, cfg.jscs.files), {base: cfg.buildPath})
+    .src(generateSource(cfg.srcPath, cfg.jscs.files), {base: cfg.srcPath})
     .pipe(jscs({configPath: cfg.jscs.configPath}))
     .pipe(jscs.reporter());
   }
@@ -208,14 +233,51 @@ gulp.task('_jscs', function (cb) {
 
 });
 
-// sass
-// ****
-// Compile Sass stylesheets in build folder to static css files into dist folder.
-gulp.task('_sass', function (cb) {
+// lint-sass
+// *********
+// Phase: pre-build
+// Lint SASS stylesheets.
+gulp.task('lint-sass', function (cb) {
+
+  if (_.isPlainObject(cfg.sassLint)) {
+    return gulp
+    .src(generateSource(cfg.srcPath, cfg.sassLint.files), {base: cfg.srcPath})
+    .pipe(sassLint(yamljs.load(cfg.sassLint.configPath)))
+    .pipe(sassLint.format())
+    .pipe(sassLint.failOnError());
+  }
+  else {
+    cb();
+  }
+
+});
+
+// setup
+// *****
+// Phase: build
+// 1. Deletes dist (and temporary dist) directory.
+// 2. Creates a fresh dist directory.
+// 3. Clones the source directory contents to distribution directory.
+// 4. Removes ignored files from dist directory.
+gulp.task('setup', function () {
+
+  var defaultIgnores = generateSource(cfg.distPath, ['/**/*.html', '/**/*.ctx.json', '/**/*.ctx.js']);
+  fs.removeSync(cfg.distPath);
+  fs.removeSync(tempDistPath);
+  fs.copySync(cfg.srcPath, cfg.distPath);
+  return del(generateSource(cfg.distPath, cfg.ignore).concat(defaultIgnores));
+
+});
+
+// compile-sass
+// ************
+// Phase: build
+// Compile SASS stylesheets from source directory to dist directory.
+gulp.task('compile-sass', function (cb) {
 
   if (_.isPlainObject(cfg.sass)) {
     return gulp
-    .src(generateSource(cfg.buildPath, ['/**/*.scss', '/**/*.sass']), {base: cfg.buildPath})
+    .src(generateSource(cfg.srcPath, '/**/*.s+(a|c)ss'), {base: cfg.srcPath})
     .pipe(foreach(function (stream, file) {
       var sassOpts = cfg.sass || {};
       var outFile = path.basename(file.path);
@@ -230,30 +292,30 @@ gulp.task('_sass', function (cb) {
 
 });
 
-// templates
-// *********
-// 1. Compile Nunjucks templates into static html files.
+// compile-templates
+// *****************
+// Phase: build
+// 1. Compile Nunjucks templates into static HTML files.
 // 2. Concatenate and minify scripts based on the markers in the templates.
-// 3. Prettify html files.
-// 4. Move the compiled templates and scripts to dist folder.
-gulp.task('_templates', function() {
+// 3. Minify HTML files.
+// 4. Move the compiled templates and scripts to dist directory.
+gulp.task('compile-templates', function() {
 
   return gulp
-  .src(generateSource(cfg.buildPath, '/**/[^_]*.html'), {base: cfg.buildPath})
+  .src(generateSource(cfg.srcPath, '/**/[^_]*.html'), {base: cfg.srcPath})
   .pipe(change(nunjucksRender))
   .pipe(useref())
   .pipe(gulpif(uglifyCondition, uglify(cfg.uglify)))
   .pipe(gulpif(minifyCondition, change(minifyHtml)))
-  .pipe(gulpif(htmlValidateCondition, w3cjs(cfg.w3cjs)))
-  .pipe(gulpif(htmlValidateCondition, w3cjs.reporter()))
   .pipe(gulp.dest(cfg.distPath));
 
 });
 
 // generate-images
 // ***************
+// Phase: build
 // Create resized versions of all configured images.
-gulp.task('_generate-images', function (cb) {
+gulp.task('generate-images', function (cb) {
 
   generateImages().then(function () {
     cb();
@@ -265,8 +327,9 @@ gulp.task('_generate-images', function (cb) {
 
 // optimize-images
 // ***************
+// Phase: build
 // Make sure images are as compressed as they can be.
-gulp.task('_optimize-images', function (cb) {
+gulp.task('optimize-images', function (cb) {
 
   if (_.isPlainObject(cfg.imagemin)) {
     return gulp
@@ -280,10 +343,71 @@ gulp.task('_optimize-images', function (cb) {
 
 });
 
-// rev
-// ***
+// build-sitemap
+// *************
+// Phase: build
+// Build sitemap from html files.
+gulp.task('build-sitemap', function (cb) {
+
+  if (_.isPlainObject(cfg.sitemap)) {
+    return gulp
+    .src(generateSource(cfg.distPath, '/**/*.html'), {base: cfg.distPath})
+    .pipe(sitemap(cfg.sitemap))
+    .pipe(gulp.dest(cfg.distPath));
+  }
+  else {
+    cb();
+  }
+
+});
+
+// uncss
+// *****
+// Phase: build
+// Remove unused styles from compiled CSS stylesheets.
+gulp.task('uncss', function () {
+
+  if (_.isPlainObject(cfg.uncss)) {
+    return gulp
+    .src(generateSource(cfg.distPath, '/**/*.css'), {base: cfg.distPath})
+    .pipe(uncss(cfg.uncss))
+    .pipe(sass(cfg.sass))
+    .pipe(gulp.dest(cfg.distPath));
+  }
+  else {
+    cb();
+  }
+
+});
+
+// compile-sass
+// ************
+// Phase: build
+// Compile SASS stylesheets from source directory to dist directory.
+gulp.task('compile-sass', function (cb) {
+
+  if (_.isPlainObject(cfg.sass)) {
+    return gulp
+    .src(generateSource(cfg.srcPath, '/**/*.s+(a|c)ss'), {base: cfg.srcPath})
+    .pipe(foreach(function (stream, file) {
+      var sassOpts = cfg.sass || {};
+      var outFile = path.basename(file.path);
+      sassOpts.outFile = outFile.substr(0, outFile.lastIndexOf('.')) + '.css';
+      return stream.pipe(sass(sassOpts));
+    }))
+    .pipe(gulp.dest(cfg.distPath));
+  }
+  else {
+    cb();
+  }
+
+});
+
+// revision
+// ********
+// Phase: build
 // Revision files.
-gulp.task('_rev', function (cb) {
+gulp.task('revision', function (cb) {
 
   if (_.isPlainObject(cfg.rev)) {
     return gulp
@@ -297,10 +421,11 @@ gulp.task('_rev', function (cb) {
 
 });
 
-// end
-// ***
-// Clean up temporary distribution folder.
-gulp.task('_end', function (cb) {
+// revision-cleanup
+// ****************
+// Phase: build
+// Clean up the havoc revisioning caused.
+gulp.task('revision-cleanup', function (cb) {
 
   fs.removeSync(cfg.distPath);
   fs.renameSync(tempDistPath, cfg.distPath);
@@ -308,10 +433,72 @@ gulp.task('_end', function (cb) {
 
 });
 
-// reload
-// ******
-// Helper task for browserSync to run build task before reloading the browsers.
-gulp.task('_reload', function (cb) {
+// validate-html
+// *************
+// Phase: post-build
+// Validate HTML markup against W3C standards.
+gulp.task('validate-html', function (cb) {
+
+  if (_.isPlainObject(cfg.w3cjs)) {
+    return gulp
+    .src(generateSource(cfg.distPath, '/**/*.html'), {base: cfg.distPath})
+    .pipe(w3cjs(cfg.w3cjs))
+    .pipe(w3cjsReporter());
+  }
+  else {
+    cb();
+  }
+
+});
+
+// pre-build
+// *********
+// Validate source files.
+gulp.task('pre-build', function (cb) {
+
+  sequence('validate-js', 'lint-js', 'lint-sass')(cb);
+
+});
+
+// build
+// *****
+// Build the distribution directory from the source files.
+gulp.task('build', function (cb) {
+
+  sequence('setup', 'compile-sass', 'compile-templates', 'generate-images', 'optimize-images', 'build-sitemap', 'uncss', 'revision', 'revision-cleanup')(cb);
+
+});
+
+// post-build
+// **********
+// Validate the distribution files.
+gulp.task('post-build', function (cb) {
+
+  sequence('validate-html')(cb);
+
+});
+
+// init
+// ****
+// Clone source directory and drudge configuration file from the module root to the app root.
+gulp.task('init', function (cb) {
+
+  if (!pathExists(cfg.srcPath)) {
+    fs.copySync(projectRoot + '/src', cfg.buildPath);
+  }
+
+  if (!pathExists(appRoot + configPath)) {
+    fs.copySync(projectRoot + configPath, appRoot + configPath);
+  }
+
+  cb();
+
+});
+
+// reload-server
+// *************
+// Helper task for browserSync to rebuild when something is changed in the source directory.
+gulp.task('server-reload', function (cb) {
 
   sequence('build')(function () {
     browserSync.reload();
@@ -320,41 +507,22 @@ gulp.task('_reload', function (cb) {
 
 });
 
-// init
-// ****
-// Clone build folder and drudge.json file from the module root to the app root.
-gulp.task('init', function (cb) {
-
-  // If build folder does not exist already in the current project let's copy it there.
-  if (!pathExists(cfg.buildPath)) {
-    fs.copySync(projectRoot + '/build', cfg.buildPath);
-  }
-
-  // If drudge.json config file does not exist already in the current project let's copy it there.
-  if (!pathExists(appRoot + '/drudge.config.js')) {
-    fs.copySync(projectRoot + '/drudge.config.js', appRoot + '/drudge.config.js');
-  }
-
-  cb();
-
-});
-
-// build
-// *****
-// As the name implies, execute all the stages needed for creating a working static site.
-gulp.task('build', function (cb) {
-
-  sequence('_setup', '_validate-js', '_jscs', '_sass', '_templates', '_generate-images', '_optimize-images', '_rev', '_end')(cb);
-
-});
-
-// serve
-// *****
+// server
+// ******
 // Start up a local development server.
-gulp.task('server', ['build'], function () {
+gulp.task('server', ['default'], function () {
 
   browserSync.init(cfg.browserSync.options);
-  gulp.watch(config.buildPath + '/**/*', ['_reload']);
+  gulp.watch(config.srcPath + '/**/*', ['reload-server']);
+
+});
+
+// default
+// *******
+// Execute the full build process.
+gulp.task('default', function (cb) {
+
+  sequence('pre-build', 'build', 'post-build')(cb);
 
 });
 
@@ -370,7 +538,7 @@ module.exports = {
   },
   build: function () {
     return new Promise(function (res) {
-      sequence('build')(res);
+      sequence('default')(res);
     });
   },
   server: function () {
