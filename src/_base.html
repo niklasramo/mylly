@@ -4,39 +4,39 @@
     {% block head %}
       <meta charset="utf-8">
       <meta http-equiv="X-UA-Compatible" content="IE=edge">
-      <title>{% block metaTitle %}{{ siteName }}{% endblock %}</title>
-      <meta name="description" content="{% block metaDescription %}{{ siteDescription }}{% endblock %}">
+      <title>{% block metaTitle %}{{ site.name }}{% endblock %}</title>
+      <meta name="description" content="{% block metaDescription %}{{ site.description }}{% endblock %}">
       <meta name="viewport" content="{% block metaViewport %}width=device-width, initial-scale=1.0, user-scalable=yes{% endblock %}">
-      <link rel="canonical" href="{% block metaCanonical %}{{ siteUrl }}{{ pagePath }}{% endblock %}">
-      {% if siteAuthor %}<meta name="author" content="{{ siteAuthor }}">{% endif %}
+      <link rel="canonical" href="{% block metaCanonical %}{{ site.url }}{{ pagePath }}{% endblock %}">
+      {% if site.author %}<meta name="author" content="{{ site.author }}">{% endif %}
       {% block metaOg %}
-        <meta property="og:site_name" content="{{ siteName }}">
+        <meta property="og:site_name" content="{{ site.name }}">
         <meta property="og:type" content="website">
-        <meta property="og:image" content="{% block metaOgImage %}{{ siteUrl }}{{ imagesPath }}/open-graph.png{% endblock %}">
-        <meta property="og:url" content="{% block metaOgUrl %}{{ siteUrl }}{{ pagePath }}{% endblock %}">
+        <meta property="og:image" content="{% block metaOgImage %}{{ site.url }}{{ path.images }}/open-graph.png{% endblock %}">
+        <meta property="og:url" content="{% block metaOgUrl %}{{ site.url }}{{ pagePath }}{% endblock %}">
       {% endblock %}
       {# Android chrome web app config #}
-      <meta name="application-name" content="{{ siteName }}">
+      <meta name="application-name" content="{{ site.name }}">
       <meta name="mobile-web-app-capable" content="yes">
-      <link rel="icon" sizes="192x192" href="{{ imagesPath }}/icon-192x192.png">
+      <link rel="icon" sizes="192x192" href="{{ path.images }}/icon-192x192.png">
       {# Windows 8/10 web app config #}
       <meta name="msapplication-config" content="/browserconfig.xml">
       {# iOS web app config #}
-      <meta name="apple-mobile-web-app-title" content="{{ siteName }}">
+      <meta name="apple-mobile-web-app-title" content="{{ site.name }}">
       <meta name="apple-mobile-web-app-capable" content="yes">
-      <meta name="apple-mobile-web-app-status-bar-style" content="black">
-      <link rel="apple-touch-icon-precomposed" sizes="180x180" href="{{ imagesPath }}/icon-180x180.png">
-      <link rel="apple-touch-icon-precomposed" sizes="152x152" href="{{ imagesPath }}/icon-152x152.png">
-      <link rel="apple-touch-icon-precomposed" sizes="144x144" href="{{ imagesPath }}/icon-144x144.png">
-      <link rel="apple-touch-icon-precomposed" sizes="120x120" href="{{ imagesPath }}/icon-120x120.png">
-      <link rel="apple-touch-icon-precomposed" sizes="114x114" href="{{ imagesPath }}/icon-114x114.png">
-      <link rel="apple-touch-icon-precomposed" sizes="76x76" href="{{ imagesPath }}/icon-76x76.png">
-      <link rel="apple-touch-icon-precomposed" sizes="72x72" href="{{ imagesPath }}/icon-72x72.png">
-      <link rel="apple-touch-icon-precomposed" href="{{ imagesPath }}/icon-57x57.png">
+      <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+      <link rel="apple-touch-icon-precomposed" sizes="180x180" href="{{ path.images }}/icon-180x180.png">
+      <link rel="apple-touch-icon-precomposed" sizes="152x152" href="{{ path.images }}/icon-152x152.png">
+      <link rel="apple-touch-icon-precomposed" sizes="144x144" href="{{ path.images }}/icon-144x144.png">
+      <link rel="apple-touch-icon-precomposed" sizes="120x120" href="{{ path.images }}/icon-120x120.png">
+      <link rel="apple-touch-icon-precomposed" sizes="114x114" href="{{ path.images }}/icon-114x114.png">
+      <link rel="apple-touch-icon-precomposed" sizes="76x76" href="{{ path.images }}/icon-76x76.png">
+      <link rel="apple-touch-icon-precomposed" sizes="72x72" href="{{ path.images }}/icon-72x72.png">
+      <link rel="apple-touch-icon-precomposed" href="{{ path.images }}/icon-57x57.png">
       {# Favicon #}
-      <link type="image/png" rel="shortcut icon" href="{{ imagesPath }}/favicon.ico">
+      <link type="image/png" rel="shortcut icon" href="{{ path.images }}/favicon.ico">
       {% block styles %}
-        <link rel="stylesheet" href="{{ stylesPath }}/main.css">
+        <link rel="stylesheet" href="{{ path.styles }}/main.css">
       {% endblock %}
       {% block scripts %}
       {% endblock %}
@@ -57,8 +57,8 @@
         </script>
       {% endif %}
       {% block scriptsBody %}
-        <!-- build:js {{ scriptsPath }}/base-body.js -->
-        <script src="{{ scriptsPath }}/main.js"></script>
+        <!-- build:js {{ path.scripts }}/main.js -->
+        <script src="{{ path.scripts }}/main.js"></script>
         <!-- endbuild -->
       {% endblock %}
     {% endblock %}

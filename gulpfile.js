@@ -1,28 +1,16 @@
 // TODO
 // ----
-// * Split build process intro phases.
-//   * Pre-build:
-//     * Lint JavaScript and SASS files.
-//   * Build:
-//     * Prepare the dist directory (remove dist dir -> clone src dir -> clean dist dir)
-//     * Compile SASS files, scripts and templates.
-//     * Resize/optimize images.
-//     * Concatenate and minify scripts.
-//     * Generate sitemap.
-//     * Remove unused CSS styles.
-//     * TODO: Generate multisize favicon.ico (16+24+32+48).
-//     * Revision files.
-//   * Post-build:
-//     * Validate HTML/XML files.
-//     * TODO: Validate minified JavaScript for syntax errors.
-//     * TODO: Validate minified CSS files for syntax errors.
-//     * TODO: Generate build report (Page per page and/or whole project).
-//       * TODO: SEO analysis.
-//       * TODO: PageSpeed insights.
-//       * TODO: Asset sizes divided to sections (total, markup, styles, scripts, images).
-//       * TODO: Check for broken links.
-// * Optimize server by running only necessary build steps when something changes.
-//
+// * Better error reporting (maybe an optional log file for erros or something).
+// * Make build faster -> hardocre perf optimizations.
+// * Generate multisize favicon.ico (16+24+32+48).
+// * Generate site SEO/PS report (page by page).
+//   * PageSpeed insights (node psi module).
+//   * SEO analysis (a mixture of node modules).
+//     * Check h1 tag existence (warn if more than one exists or none exist).
+//     * Check title and description meta tags (warn if missing or empty).
+//     * Check page crawlability (robots.txt / <meta name="robots" content="noindex, nofollow">).
+//     * Check image alt tags (warn if missing or empty).
+//     * Check for broken links (warn if broken).
 
 //
 // Modules
@@ -41,6 +29,7 @@ var appRoot = require('app-root-path');
 var browserSync = require('browser-sync').create();
 var yamljs = require('yamljs');
 var through2 = require('through2');
+var js2xmlparser = require("js2xmlparser");
 var gulp = require('gulp');
 var sass = require('gulp-sass');
 var sassLint = require('gulp-sass-lint');
@@ -361,6 +350,40 @@ gulp.task('build-sitemap', function (cb) {
 
 });
 
+// build-browserconfig
+// *******************
+// Phase: build
+// Build browserconfig.xml.
+gulp.task('build-browserconfig', function (cb) {
+
+  if (cfg.browserconfig) {
+
+    var data = js2xmlparser('browserconfig', {
+      'msapplication': {
+        'tile': {
+          'square70x70logo': {'@': {'src': cfg.browserconfig.tile70x70}},
+          'square150x150logo': {'@': {'src': cfg.browserconfig.tile150x150}},
+          'square310x150logo': {'@': {'src': cfg.browserconfig.tile310x150}},
+          'square310x310logo': {'@': {'src': cfg.browserconfig.tile310x310}},
+          'TileColor': cfg.browserconfig.tileColor
+        }
+      }
+    });
+
+    fs.writeFile(cfg.distPath + '/browserconfig.xml', data, function (err) {
+      if (err) cb(err);
+      cb();
+    });
+
+  }
+  else {
+
+    cb();
+
+  }
+
+});
+
 // uncss
 // *****
 // Phase: build
@@ -465,7 +488,7 @@ gulp.task('pre-build', function (cb) {
 // Build the distribution directory from the source files.
 gulp.task('build', function (cb) {
 
-  sequence('setup', 'compile-sass', 'compile-templates', 'generate-images', 'optimize-images', 'build-sitemap', 'uncss', 'revision', 'revision-cleanup')(cb);
+  sequence('setup', 'compile-sass', 'compile-templates', 'generate-images', 'optimize-images', 'build-sitemap', 'build-browserconfig', 'uncss', 'revision', 'revision-cleanup')(cb);
 
 });
 
@@ -512,7 +535,7 @@ gulp.task('server-reload', function (cb) {
 // Start up a local development server.
 gulp.task('server', ['default'], function () {
 
-  browserSync.init(cfg.browserSync.options);
+  browserSync.init(cfg.browsersync.options);
   gulp.watch(config.srcPath + '/**/*', ['reload-server']);
 
 });

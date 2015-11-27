@@ -1,38 +1,68 @@
+//
+// Quick configuration
+// *******************
+// These variables offer an easy way to configure drudge quickly if you are happy with most of the
+// default settings.
+//
+
+// Define src/dist paths.
+var srcPath = './src';
+var distPath = './dist';
+
+// Define asset paths.
+var path = {
+  scripts: '/assets/scripts',
+  styles: '/assets/styles',
+  images: '/assets/images'
+};
+
+// Define basic site data.
+var site  = {
+  url: 'http://mywebsite.com',
+  name: 'My website',
+  description: 'My website description',
+  author: 'John Doe'
+};
+
+// Define core template data.
+var templateData = {
+  site: site,
+  path: path,
+  googleAnalyticsUa: '' // UA-XXXXXX-XX
+};
+
+//
+// Advanced confiquration
+// **********************
+// Alternatively you can directly modify configuration object for more fine-grained control.
+//
+
 var config = {};
 
 // Path to the source directory.
 // @type {String}
-config.srcPath = './src';
+config.srcPath = srcPath;
 
 // Path to the distribution directory.
 // @type {String}
-config.distPath = './dist';
+config.distPath = distPath;
 
 // Core template data which is provided for all templates as context data. Template specific data
-// (if any) is merged with this data.
+// (if any) is merged with this data. If the core and template data have identically named
+// properties the template data is preferred.
 // @type {Object|Null}
-config.templateData = {
-  siteUrl: 'http://mywebsite.com',
-  siteName: 'My website',
-  siteDescription: 'My website description',
-  siteAuthor: '',
-  googleAnalyticsUa: '',
-  staticPath: '/static',
-  stylesPath: '/static/styles',
-  scriptsPath: '/static/scripts',
-  imagesPath: '/static/images'
-};
+config.templateData = templateData;
 
 // SASS linter configuration. Set to null to disable.
 // @type {Object|Null}
 config.sassLint = {
   // Define the files you want SASS linter to validate. The paths are relative to srcPath.
   // @type {Array|String}
-  files: '/static/styles/*.s+(a|c)ss',
+  files: path.styles + '/*.s+(a|c)ss',
   // Path to SASS linter configuration file.
   // https://github.com/sasstools/sass-lint/blob/master/docs/sass-lint.yml
   // @type {String}
-  configPath: config.srcPath + '/sass-lint.yml'
+  configPath: srcPath + '/sass-lint.yml'
 };
 
 // Set to true to validate all JavaScript files for syntax errors in the source directory.
@@ -45,10 +75,10 @@ config.jscs = {
   // Define the files you want JSCS to validate. The paths are relative to srcPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
-  files: '/static/scripts/*.js',
+  files: path.scripts + '/*.js',
   // Path to the .jscsrc configuration file.
   // @type {String}
-  configPath: config.srcPath + '/.jscsrc'
+  configPath: srcPath + '/.jscsrc'
 };
 
 // Nunjucks configuration.
@@ -87,19 +117,19 @@ config.htmlMinifier = {
 // @type {Array|Null}
 config.generateImages = [
   {
-    source: '/static/images/templates/icon.png',
+    source: path.images + '/templates/icon.png',
     sizes: [[192, 192], [180, 180], [152, 152], [144, 144], [120, 120], [114, 114], [76, 76], [72, 72], [57, 57]],
-    target: '/static/images/icon-{{ width }}x{{ height }}.png'
+    target: path.images + '/icon-{{ width }}x{{ height }}.png'
   },
   {
-    source: '/static/images/templates/tile.png',
+    source: path.images + '/templates/tile.png',
     sizes: [[310, 310], [150, 150], [70, 70]],
-    target: '/static/images/tile-{{ width }}x{{ height }}.png'
+    target: path.images + '/tile-{{ width }}x{{ height }}.png'
   },
   {
-    source: '/static/images/templates/tile-wide.png',
+    source: path.images + '/templates/tile-wide.png',
     sizes: [[310, 150]],
-    target: '/static/images/tile-{{ width }}x{{ height }}.png'
+    target: path.images + '/tile-{{ width }}x{{ height }}.png'
   }
 ];
 
@@ -117,21 +147,33 @@ config.imagemin = {
 };
 
 // Auto-generate sitemap.xml. Set null to disable.
-//https://www.npmjs.com/package/gulp-sitemap#options
+// https://www.npmjs.com/package/gulp-sitemap#options
 // @type {Object|Null}
 config.sitemap = {
-  siteUrl: config.templateData.siteUrl,
+  siteUrl: site.url,
   spacing: '  '
+};
+
+// Auto-generate browserconfig.xml. Set null to disable.
+// https://www.npmjs.com/package/gulp-sitemap#options
+// @type {Object|Null}
+config.browserconfig = {
+  tile70x70: path.images + '/tile-70x70.png',
+  tile150x150: path.images + '/tile-150x150.png',
+  tile310x150: path.images + '/tile-310x150.png',
+  tile310x310: path.images + '/tile-310x310.png',
+  tileColor: '#ffffff'
 };
 
 // Remove unused styles. Set null to disable.
 // https://github.com/ben-eb/gulp-uncss#options
 // @type {Object|Null}
 config.uncss = {
-  html: [config.distPath + '/**/*.html'],
+  html: [distPath + '/**/*.html'],
   ignore: []
 };
 
+// TODO: this should be much more easier to configure, possibly even just a boolean (on/off).
 // Revisioning configuration. Set to null to disable.
 // https://github.com/smysnk/gulp-rev-all
 // @type {Object|Null}
@@ -157,9 +199,9 @@ config.w3cjs = {};
 // BrowserSync configuration.
 // http://www.browsersync.io/docs/options/
 // @type {Object}
-config.browserSync = {
+config.browsersync = {
   server: {
-    baseDir: config.distPath
+    baseDir: distPath
   },
   reloadOnRestart: true,
   injectChanges: false
@@ -173,9 +215,9 @@ config.browserSync = {
 // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
 // @type {Array|String}
 config.ignore = [
-  '/static/images/templates',
-  '/static/scripts/**/*',
-  '/static/styles/**/*',
+  path.images + '/templates',
+  path.scripts + '/**/*',
+  path.styles + '/**/*',
   '/.jscsrc',
   '/sass-lint.yml'
 ];
