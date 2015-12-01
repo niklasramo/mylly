@@ -1,15 +1,13 @@
-//
 // Quick configuration
 // *******************
 // These variables offer an easy way to configure drudge quickly if you are happy with most of the
 // default settings.
-//
 
 // Define src/dist paths.
 var srcPath = './src';
 var distPath = './dist';
 
-// Define asset paths.
+// Define paths to asset directories.
 var path = {
   scripts: '/assets/scripts',
   styles: '/assets/styles',
@@ -31,11 +29,13 @@ var templateData = {
   googleAnalyticsUa: '' // UA-XXXXXX-XX
 };
 
-//
+// Define Nunjucks template identifier.
+var tplIdentifier = '.tpl';
+var tplContextIdentifier = '.ctx';
+
 // Advanced confiquration
 // **********************
 // Alternatively you can directly modify configuration object for more fine-grained control.
-//
 
 var config = {};
 
@@ -47,16 +47,32 @@ config.srcPath = srcPath;
 // @type {String}
 config.distPath = distPath;
 
-// Core template data which is provided for all templates as context data. Template specific data
-// (if any) is merged with this data. If the core and template data have identically named
-// properties the template data is preferred.
+// JavaScript syntax error validation configuration. Set to null to disable.
+// https://www.npmjs.com/package/gulp-jsvalidate
 // @type {Object|Null}
-config.templateData = templateData;
+config.validateJs = {
+  // Define the JavaScript files you want to validate. The paths are relative to srcPath.
+  // @type {Array|String}
+  files: '/**/*.js'
+};
 
-// SASS linter configuration. Set to null to disable.
+// JavaScript linting configuration. Set to null to disable.
 // @type {Object|Null}
-config.sassLint = {
-  // Define the files you want SASS linter to validate. The paths are relative to srcPath.
+config.lintJs = {
+  // Define the JavaScript files you want to lint. The paths are relative to srcPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: path.scripts + '/*.js',
+  // Path to the .jscsrc configuration file.
+  // http://jscs.info/
+  // @type {String}
+  configPath: srcPath + '/.jscsrc'
+};
+
+// Sass linting configuration. Set to null to disable.
+// @type {Object|Null}
+config.lintSass = {
+  // Define the files you want to lint. The paths are relative to srcPath.
   // @type {Array|String}
   files: path.styles + '/*.s+(a|c)ss',
   // Path to SASS linter configuration file.
@@ -65,51 +81,143 @@ config.sassLint = {
   configPath: srcPath + '/sass-lint.yml'
 };
 
-// Set to true to validate all JavaScript files for syntax errors in the source directory.
-// @type {Boolean}
-config.validateJs = true;
-
-// JSCS configuration. Set to null to disable.
+// Templates configuration. Set to null to disable.
 // @type {Object|Null}
-config.jscs = {
-  // Define the files you want JSCS to validate. The paths are relative to srcPath.
+config.templates = {
+  // This string is used for identifying template files. The provided string is removed from the
+  // compiled template's basename when processing templates.
+  // @type {String}
+  identifier: tplIdentifier,
+  // This string is used for identifying template context files.
+  // @type {String}
+  contextIdentifier: tplContextIdentifier,
+  // Define the files you want Nunjucks to process. The paths are relative to srcPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
-  files: path.scripts + '/*.js',
-  // Path to the .jscsrc configuration file.
-  // @type {String}
-  configPath: srcPath + '/.jscsrc'
+  files: '/**/[^_]*' + tplIdentifier + '.html',
+  // Core template data which is provided for all templates as context data. Template specific data
+  // (if any) is merged with this data. If the core and template data have identically named
+  // properties the template data is preferred.
+  // @type {Object|Null}
+  data: templateData,
+  // Nunjucks marked configuration. Set to null to disable.
+  // https://github.com/chjj/marked#options-1
+  // @type {Object|Null}
+  markdown: {},
+  // Nunjucks options.
+  // https://mozilla.github.io/nunjucks/api.html#configure
+  // @type {Object}
+  options: {
+    autoescape: true
+  }
 };
 
-// Nunjucks configuration.
-// https://mozilla.github.io/nunjucks/api.html#configure
-// @type {Object}
-config.nunjucks = {
-  autoescape: true
-};
-
-// Marked configuration.
-// https://github.com/chjj/marked#options-1
-// @type {Object}
-config.marked = {};
-
-// SASS configuration. Set to null to disable.
-// https://github.com/sass/node-sass#options
+// Sass configuration. Set to null to disable.
 // @type {Object|Null}
 config.sass = {
-  outputStyle: 'compressed'
+  // Define the Sass files you want to compile. The paths are relative to srcPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: '/**/*.s+(a|c)ss',
+  // SASS options.
+  // https://github.com/sass/node-sass#options
+  // @type {Object}
+  options : {
+    outputStyle: 'expanded'
+  }
 };
 
-// Uglify configuration. Set to null to disable.
-// https://www.npmjs.com/package/gulp-uglify#options
+// Collect marked styles and and scripts within specified HTML files. Set to null to disable.
+// https://www.npmjs.com/package/gulp-useref#usage
 // @type {Object|Null}
-config.uglify = {};
+config.collectAssets = {
+  // Define the HTML files you want to process for concatenation markers. The paths are relative to
+  // distPath.
+  // @type {Array|String}
+  files: ['/**/*.html']
+};
 
-// HTML minifier configuration. Set to null to disable.
-// https://www.npmjs.com/package/html-minifier#options-quick-reference
+// JavaScript minification configuration. Set to null to disable.
 // @type {Object|Null}
-config.htmlMinifier = {
-  collapseWhitespace: true
+config.minifyJs = {
+  // Define the JavaScript files you want to minify. The paths are relative to distPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: path.scripts + '/**/[dist.]*.js',
+  // Uglify options.
+  // https://www.npmjs.com/package/gulp-uglify#options
+  // @type {Object}
+  options: {}
+};
+
+// HTML minification configuration. Set to null to disable.
+// @type {Object|Null}
+config.minifyHtml = {
+  // Define the HTML files you want to minify. The paths are relative to distPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: ['/**/*.html'],
+  // HTML minifier options.
+  // https://www.npmjs.com/package/html-minifier#options-quick-reference
+  // @type {Object}
+  options: {
+    collapseWhitespace: true
+  }
+};
+
+// Remove unused styles. Set null to disable.
+// @type {Object|Null}
+config.cleanCss = {
+  // Define the CSS files you want to process. The paths are relative to distPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: '/**/[dist.]*.css',
+  // Uncss options.
+  // https://github.com/ben-eb/gulp-uncss#options
+  // @type {Object}
+  options: {
+    html: [distPath + '/**/*.html'],
+    ignore: []
+  }
+};
+
+// Minify styles. Set null to disable.
+// @type {Object|Null}
+config.minifyCss = {
+  // Define the CSS files you want to process. The paths are relative to distPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: '/**/[dist.]*.css',
+  // cssnano options.
+  // http://cssnano.co/options/
+  // @type {Object}
+  options: {}
+};
+
+// Auto-generate sitemap.xml. Set null to disable.
+// @type {Object|Null}
+config.sitemap = {
+  // Define the files you want to include in the sitemap. The paths are relative to distPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: ['/**/*.html'],
+  // Sitemap generator options.
+  // https://www.npmjs.com/package/gulp-sitemap#options
+  // @type {Object}
+  options: {
+    siteUrl: site.url,
+    spacing: '  '
+  }
+};
+
+// Auto-generate browserconfig.xml. Set null to disable.
+// @type {Object|Null}
+config.browserconfig = {
+  tile70x70: path.images + '/tile-70x70.png',
+  tile150x150: path.images + '/tile-150x150.png',
+  tile310x150: path.images + '/tile-310x150.png',
+  tile310x310: path.images + '/tile-310x310.png',
+  tileColor: '#ffffff'
 };
 
 // Image generator configuration. Provide an array of configuration objects to generate resized
@@ -133,68 +241,80 @@ config.generateImages = [
   }
 ];
 
-// Imagemin configuration. Set to null to disable.
+// Image optimization configuration. Set to null to disable.
 // @type {Object|Null}
-config.imagemin = {
-  // Define the files you want Imagemin to process. The paths are relative to distPath.
+config.optimizeImages = {
+  // Define the image files you want to optimize. The paths are relative to distPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: '/**/*.{jpg,png,gif,svg}',
-  // Imagemin plugin options.
+  // Imagemin options.
   // https://github.com/sindresorhus/gulp-imagemin
   // @type {Object}
   options: {}
 };
 
-// Auto-generate sitemap.xml. Set null to disable.
-// https://www.npmjs.com/package/gulp-sitemap#options
-// @type {Object|Null}
-config.sitemap = {
-  siteUrl: site.url,
-  spacing: '  '
-};
-
-// Auto-generate browserconfig.xml. Set null to disable.
-// https://www.npmjs.com/package/gulp-sitemap#options
-// @type {Object|Null}
-config.browserconfig = {
-  tile70x70: path.images + '/tile-70x70.png',
-  tile150x150: path.images + '/tile-150x150.png',
-  tile310x150: path.images + '/tile-310x150.png',
-  tile310x310: path.images + '/tile-310x310.png',
-  tileColor: '#ffffff'
-};
-
-// Remove unused styles. Set null to disable.
-// https://github.com/ben-eb/gulp-uncss#options
-// @type {Object|Null}
-config.uncss = {
-  html: [distPath + '/**/*.html'],
-  ignore: []
-};
-
-// TODO: this should be much more easier to configure, possibly even just a boolean (on/off).
 // Revisioning configuration. Set to null to disable.
-// https://github.com/smysnk/gulp-rev-all
 // @type {Object|Null}
-config.rev = {
-  dontRenameFile: ['.html', '.xml', '.json', '.txt'],
-  annotator: function(contents, path) {
-    var fragments = [{'contents': contents}];
-    return fragments;
-  },
-  replacer: function(fragment, replaceRegExp, newReference, referencedFile) {
-    if (referencedFile.revFilenameExtOriginal === '.js' && !newReference.match(/\.js$/)){
-      return;
-    }
-    fragment.contents = fragment.contents.replace(replaceRegExp, '$1' + newReference + '$3$4');
+config.revision = {
+  // Define the files you want the revision system to process. The paths are relative to distPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: [
+    '/**',
+    '!' + path.styles + '/**/*.s+(a|c)ss'
+  ],
+  // Revision system options.
+  // https://github.com/smysnk/gulp-rev-all
+  // @type {Object}
+  options: {
+    dontRenameFile: ['.html', '.xml', '.json', '.txt']
   }
 };
 
 // HTML validator configuration. Set to null to disable.
-// https://www.npmjs.com/package/gulp-w3cjs#w3cjs-options
 // @type {Object|Null}
-config.w3cjs = {};
+config.validateHtml = {
+  // Define the HTML files you want to validate. The paths are relative to distPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: ['/**/*.html'],
+  // HTML validator options.
+  // https://www.npmjs.com/package/gulp-w3cjs#w3cjs-options
+  // @type {Object}
+  options: {}
+};
+
+// The build process starts with atomizing the distribution directory after which the source
+// directory is cloned as the base for the distribution directory. This settings allows you to
+// define files and directories which should be removed from the distribution directory before the
+// build process starts. All the paths are relative to the distribution directory.
+// https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+// @type {Array|String}
+config.cleanBefore = [
+  // Clean all template files and their context files.
+  '/**/*' + tplIdentifier + '.html',
+  '/**/*' + tplIdentifier + tplContextIdentifier + '.json',
+  '/**/*' + tplIdentifier + tplContextIdentifier + '.js',
+  // Clean config files.
+  '/.jscsrc',
+  '/sass-lint.yml'
+];
+
+// This settings allows you to define which files and folders to remove after the build process.
+// All the paths are relative to the distribution directory.
+// https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+// @type {Array|String}
+config.cleanAfter = [
+  // Clean all image templates.
+  path.images + '/templates',
+  // Clean all source scripts.
+  path.scripts + '/**/[^dist.]*.js',
+  // Clean all sass files.
+  path.styles + '/**/*.s+(a|c)ss',
+  // Clean all non distribution css files
+  path.styles + '/**/[^dist.]*.css'
+];
 
 // BrowserSync configuration.
 // http://www.browsersync.io/docs/options/
@@ -206,20 +326,5 @@ config.browsersync = {
   reloadOnRestart: true,
   injectChanges: false
 };
-
-// The build process starts with atomizing the distribution directory after which the source
-// directory is cloned as the base for the distribution directory. With this setting you can define
-// which files/folders should be deleted from the distribution directory right after the clone
-// process. Note that there are some enforced defaults which are needed to make the build process
-// work. All the paths are relative to the distribution directory.
-// https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
-// @type {Array|String}
-config.ignore = [
-  path.images + '/templates',
-  path.scripts + '/**/*',
-  path.styles + '/**/*',
-  '/.jscsrc',
-  '/sass-lint.yml'
-];
 
 module.exports = config;

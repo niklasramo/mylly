@@ -36,7 +36,9 @@
       {# Favicon #}
       <link type="image/png" rel="shortcut icon" href="{{ path.images }}/favicon.ico">
       {% block styles %}
+        <!-- build:css {{ path.styles }}/dist.main.css -->
         <link rel="stylesheet" href="{{ path.styles }}/main.css">
+        <!-- endbuild -->
       {% endblock %}
       {% block scripts %}
       {% endblock %}
@@ -57,8 +59,9 @@
         </script>
       {% endif %}
       {% block scriptsBody %}
-        <!-- build:js {{ path.scripts }}/main.js -->
-        <script src="{{ path.scripts }}/main.js"></script>
+        <!-- build:js {{ path.scripts }}/dist.base.js -->
+        <script src="{{ path.scripts }}/a.js"></script>
+        <script src="{{ path.scripts }}/b.js"></script>
         <!-- endbuild -->
       {% endblock %}
     {% endblock %}
