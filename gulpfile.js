@@ -1,17 +1,13 @@
 // TODO for v0.1.0
 // ---------------
-// * Gulp cache id for each Drudge instance.
-// * Sanitize config options on instance creation.
-// * Make marked and nunjucks processing optional.
-// * Configuration presets for Website, App, Blog.
-// * Explain the build process in the readme with pointers to configurations.
-// * Babel integration.
+// * CSS/JS sourcemaps.
+// * Check that gulp negation works as assumed.
 // * Esprima + JSCS -> ESLint.
-// * Define design goals and philosophy behind the project.
-// * Graceful Sass/JS error handling for browsersync server. Invalid JS/SASS should not kill the server process, just gracefully cancel the current build process.
-// * Option to warn about console logs and other development related stuff in JavaScript files.
+// * Drudge should strive to become a flat file CMS embracing future standards. Grav is an awesome ffcms example.
+// * Explain the build process in the readme with pointers to configurations.
 // * Generate multisize favicon.ico (16+24+32+48).
 // * Explore another HTML linter: https://www.npmjs.com/package/gulp-htmlhint another alternative/parallel linter.
+// * Babel integration (Maybe this is a bad idea, debugging transformed code sounds like a massive PITA).
 // * Generate site SEO/PS report (page by page).
 //   * PageSpeed insights (node psi module).
 //   * SEO analysis (a mixture of node modules).
@@ -40,6 +36,7 @@ var yamljs = require('yamljs');
 var through2 = require('through2');
 var js2xmlparser = require("js2xmlparser");
 var vinylPaths = require('vinyl-paths');
+var isOnline = require('is-online');
 var gulp = require('gulp');
 var util = require('gulp-util');
 var sass = require('gulp-sass');
@@ -66,6 +63,126 @@ var cssnano = require('gulp-cssnano');
 // Local variables
 //
 
+// The build tasks in the correct exection order.
+var taskQueue = [
+  'pre-build:validate-js',
+  'pre-build:lint-js',
+  'pre-build:lint-sass',
+  'build:setup',
+  'build:templates',
+  'build:sass',
+  'build:collect-assets',
+  'build:minify-js',
+  'build:minify-html',
+  'build:clean-css',
+  'build:minify-css',
+  'build:sitemap',
+  'build:browserconfig',
+  'build:generate-images',
+  'build:optimize-images',
+  'build:revision',
+  'build:clean',
+  'post-build:validate-html'
+];
+
+// Configuration option properties matcing the task queue execution order.
+// This list is used to check which build tasks are to be ignored.
+var taskPredicates = [
+  'validateJs',
+  'lintJs',
+  'lintSass',
+  null,
+  'templates',
+  'sass',
+  'collectAssets',
+  'minifyJs',
+  'minifyHtml',
+  'cleanCss',
+  'minifyCss',
+  'sitemap',
+  'browserconfig',
+  'generateImages',
+  'optimizeImages',
+  'revision',
+  null,
+  'validateHtml'
+];
+
+var allowedConfigTypes = {
+  srcPath: ['string'],
+  buildPath: ['string'],
+  distPath: ['string'],
+  validateJs: ['object|null', {
+    files: ['array|string']
+  }],
+  lintJs: ['object|null', {
+    files: ['array|string'],
+    configPath: ['string']
+  }],
+  lintSass: ['object|null', {
+    files: ['array|string'],
+    configPath: ['string']
+  }],
+  templates: ['object|null', {
+    files: ['array|string'],
+    identifier: ['string'],
+    contextIdentifier: ['string'],
+    data: ['object|null'],
+    markdown: ['object|null'],
+    options: ['object']
+  }],
+  sass: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  collectAssets: ['object|null', {
+    files: ['array|string']
+  }],
+  minifyJs: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  minifyHtml: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  cleanCss: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  minifyCss: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  sitemap: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  browserconfig: ['object|null', {
+    tile70x70: ['string'],
+    tile150x150: ['string'],
+    tile310x150: ['string'],
+    tile310x310: ['string'],
+    tileColor: ['string']
+  }],
+  generateImages: ['array|null'],
+  optimizeImages: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  revision: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  validateHtml: ['object|null', {
+    files: ['array|string'],
+    options: ['object']
+  }],
+  cleanBefore: ['array|string'],
+  cleanAfter: ['array|string'],
+  browsersync: ['object']
+};
+
 // Get project root path.
 var projectRoot = __dirname;
 
@@ -76,10 +193,13 @@ var configPath = '/drudge.config.js';
 var baseCfg = getFileData(projectRoot + configPath);
 
 // Build queue.
-var buildQueue = Promise.resolve();
+var $Q = Promise.resolve();
 
-// Current build's Drudge instance.
-var buildDrudge;
+// Currently active Drudge instance.
+var $D;
+
+// Drudge instance id
+var DrudgeId = 0;
 
 //
 // Drudge constructor
@@ -87,20 +207,31 @@ var buildDrudge;
 
 function Drudge(opts) {
 
+  var inst = this;
+
+  // Generate id for the instance.
+  inst.id = ++DrudgeId;
+
   // Sanitize options.
   opts = _.isPlainObject(opts) ? opts : _.isString(opts) ? getFileData(opts) : {};
 
   // Store configuration to instance.
-  this.config = _.assign({}, baseCfg, opts);
-
-  // Setup temporary distribution directory path.
-  this.config.distPathTemp = this.config.distPath + '_tmp';
+  inst.config = sanitizeOptions(_.assign({}, baseCfg, opts));
 
   // Create Browsersync instance.
-  this.browsersync = browserSync.create();
+  inst.browsersync = browserSync.create();
 
   // Create Nunjucks instance.
-  this.nunjucks = nunjucks.configure(this.config.srcPath, _.isPlainObject(this.config.templates) ? forceObj(this.config.templates.options) : {});
+  inst.nunjucks = nunjucks.configure(inst.config.srcPath, inst.config.templates ? inst.config.templates.options : {});
+
+  // Create revAll instance.
+  inst.revAll = new revAll(inst.config.revision ? inst.config.revision.options : {});
+
+  // Build task queue.
+  inst.tasks = _.remove(taskQueue.slice(0), function (taskName, i) {
+    var predicate = taskPredicates[i];
+    return predicate === null ? true : !!inst.config[predicate];
+  });
 
 }
 
@@ -111,10 +242,10 @@ Drudge.prototype._setup = function () {
   return new Promise(function (res) {
 
     // Setup build instance.
-    buildDrudge = inst;
+    $D = inst;
 
     // Setup marked.
-    if (_.isPlainObject(inst.config.templates) && _.isPlainObject(inst.config.templates.markdown)) {
+    if (inst.config.templates && inst.config.templates.markdown) {
       marked.setOptions(inst.config.templates.markdown);
       nunjucksMarkdown.register(inst.nunjucks, marked);
     }
@@ -128,7 +259,8 @@ Drudge.prototype._setup = function () {
 Drudge.prototype.init = function () {
 
   var inst = this;
-  return new Promise(function (res) {
+
+  return new Promise(function (resolve) {
 
     if (!pathExists(inst.config.srcPath)) {
       fs.copySync(projectRoot + '/src', inst.config.buildPath);
@@ -138,7 +270,7 @@ Drudge.prototype.init = function () {
       fs.copySync(projectRoot + configPath, appRoot + configPath);
     }
 
-    res(inst);
+    resolve(inst);
 
   });
 
@@ -147,34 +279,45 @@ Drudge.prototype.init = function () {
 Drudge.prototype.build = function () {
 
   var inst = this;
-  buildQueue = buildQueue
-  .then(function () {
+
+  return $Q = $Q.then(function () {
     return inst._setup();
   })
   .then(function () {
-    return new Promise(function (res) {
-      sequence('pre-build', 'build', 'post-build')(function () {
-        res(inst);
+    return new Promise(function (resolve, reject) {
+      sequence('build')(function (err) {
+        if (err) reject(err);
+        resolve(inst);
       });
     });
+  })
+  .catch(function (err) {
+
+    // Let's atomize the temporary distribution directory
+    // if a build fails.
+    if (pathExists(inst.config.buildPath)) {
+      fs.removeSync(inst.config.buildPath);
+    }
+
+    return inst;
+
   });
-  return buildQueue;
 
 };
 
 Drudge.prototype.server = function () {
 
   var inst = this;
-  return inst.build()
-  .then(function () {
-    return new Promise(function (res) {
-      inst.browsersync.init(forceObj(inst.config.browsersync));
+
+  return inst.build().then(function () {
+    return new Promise(function (resolve) {
+      inst.browsersync.init(inst.config.browsersync);
       gulp.watch(inst.config.srcPath + '/**/*', function () {
         inst.build().then(function () {
           inst.browsersync.reload();
         });
       });
-      res(inst);
+      resolve(inst);
     });
   });
 
@@ -183,6 +326,64 @@ Drudge.prototype.server = function () {
 //
 // Custom helpers
 //
+
+function sanitizeOptions(opts) {
+
+  opts = _.assign({}, _.isPlainObject(opts) ? opts : {});
+
+  validateOptionBranch(allowedConfigTypes, opts);
+
+  return opts;
+
+}
+
+function validateOptionBranch(treeBranch, optsBranch) {
+
+  _.forEach(treeBranch, function (val, key) {
+
+    var
+    optionValue = optsBranch[key],
+    allowedValues = val[0],
+    nestedRules = val[1];
+
+    if (!typeCheck(optionValue, allowedValues)) {
+      throw new TypeError('Configuration object has bad data.');
+    }
+
+    if (optionValue && typeOf(nestedRules, 'object')) {
+      validateOptionBranch(nestedRules, optionValue);
+    }
+
+  });
+
+}
+
+function typeOf(value, isType) {
+
+  var
+  type = typeof value;
+
+  type = type !== 'object' ? type : ({}).toString.call(value).split(' ')[1].replace(']', '').toLowerCase();
+
+  return isType ? type === isType : type;
+
+}
+
+function typeCheck(value, types) {
+
+  var
+  ok = false,
+  typesArray = types.split('|');
+
+  _.forEach(typesArray, function (type) {
+
+    ok = !ok ? typeOf(value, type) : ok;
+
+  });
+
+  return ok;
+
+}
 
 function pathExists(filePath) {
 
@@ -222,12 +423,6 @@ function genSrc(root, src) {
 
 }
 
-function forceObj(obj) {
-
-  return _.isPlainObject(obj) ? obj : {};
-
-}
-
 function getFileData(filePath) {
 
   return pathExists(filePath) ? require(filePath) : {};
@@ -237,18 +432,18 @@ function getFileData(filePath) {
 function getTemplateData(file) {
 
   // Get template core data.
-  var tplCoreData = forceObj(buildDrudge.config.templates.data);
+  var tplCoreData = $D.config.templates.data;
 
   // Get JSON context file.
   var tplJsonData = path.parse(file.path);
-  tplJsonData.name = tplJsonData.name + buildDrudge.config.templates.contextIdentifier;
+  tplJsonData.name = tplJsonData.name + $D.config.templates.contextIdentifier;
   tplJsonData.ext = '.json';
   tplJsonData.base = tplJsonData.name + tplJsonData.ext;
   tplJsonData = getFileData(path.format(tplJsonData));
 
   // Get JS context file.
   var tplJsData = path.parse(file.path);
-  tplJsData.name = tplJsData.name + buildDrudge.config.templates.contextIdentifier;
+  tplJsData.name = tplJsData.name + $D.config.templates.contextIdentifier;
   tplJsData.ext = '.js';
   tplJsData.base = tplJsData.name + tplJsData.ext;
   tplJsData = getFileData(path.format(tplJsData));
@@ -266,13 +461,13 @@ function nunjucksRender(content) {
 
   var file = this.file;
   var data = getTemplateData(file);
-  return buildDrudge.nunjucks.render(path.relative(buildDrudge.config.srcPath, file.path), data);
+  return $D.nunjucks.render(path.relative($D.config.srcPath, file.path), data);
 
 }
 
 function minifyHtml(content) {
 
-  return htmlMinifier(content, forceObj(buildDrudge.config.minifyHtml.options));
+  return htmlMinifier(content, $D.config.minifyHtml.options);
 
 }
 
@@ -281,7 +476,7 @@ function w3cjsReporter() {
   return through2.obj(function (file, enc, cb) {
     cb(null, file);
     if (file.w3cjs && !file.w3cjs.success) {
-      console.log('HTML validation error(s) found');
+      util.log('HTML validation error(s) found');
     }
   });
 
@@ -290,11 +485,12 @@ function w3cjsReporter() {
 function generateImages() {
 
   var promises = [];
-  var sets = (buildDrudge.config.generateImages || []);
+  var sets = ($D.config.generateImages || []);
+
   sets.forEach(function (set) {
     set.sizes.forEach(function (size) {
-      var sourcePath = buildDrudge.config.distPath + set.source;
-      var targetPath = buildDrudge.config.distPath + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]);
+      var sourcePath = $D.config.buildPath + set.source;
+      var targetPath = $D.config.buildPath + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]);
       if (!pathExists(targetPath)) {
         var promise = jimp.read(sourcePath).then(function (img) {
           return img.resize(size[0], size[1]).write(targetPath);
@@ -308,6 +504,12 @@ function generateImages() {
 
 }
 
+function logSkipTask(taskName, reason) {
+
+  util.log(util.colors.yellow("Skipping"), "'" + util.colors.cyan(taskName) + "'", util.colors.red(reason));
+
+}
+
 //
 // Tasks
 //
@@ -315,51 +517,36 @@ function generateImages() {
 // Check all JavaScript files for syntax errors.
 gulp.task('pre-build:validate-js', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.validateJs)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.srcPath, buildDrudge.config.validateJs.files), {
-      base: buildDrudge.config.srcPath
-    })
-    .pipe(jsValidate());
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.srcPath, $D.config.validateJs.files), {
+    base: $D.config.srcPath
+  })
+  .pipe(jsValidate());
 
 });
 
 // Make sure that JavaScript files are written in correct style.
 gulp.task('pre-build:lint-js', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.lintJs)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.srcPath, buildDrudge.config.lintJs.files), {
-      base: buildDrudge.config.srcPath
-    })
-    .pipe(jscs({configPath: buildDrudge.config.lintJs.configPath}))
-    .pipe(jscs.reporter());
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.srcPath, $D.config.lintJs.files), {
+    base: $D.config.srcPath
+  })
+  .pipe(jscs({configPath: $D.config.lintJs.configPath}))
+  .pipe(jscs.reporter());
 
 });
 
 // Lint SASS stylesheets.
 gulp.task('pre-build:lint-sass', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.lintSass)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.srcPath, buildDrudge.config.lintSass.files), {
-      base: buildDrudge.config.srcPath
-    })
-    .pipe(sassLint(yamljs.load(buildDrudge.config.lintSass.configPath)))
-    .pipe(sassLint.format())
-    .pipe(sassLint.failOnError());
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.srcPath, $D.config.lintSass.files), {
+    base: $D.config.srcPath
+  })
+  .pipe(sassLint(yamljs.load($D.config.lintSass.configPath)))
+  .pipe(sassLint.format())
+  .pipe(sassLint.failOnError());
 
 });
 
@@ -368,13 +555,12 @@ gulp.task('pre-build:lint-sass', function (cb) {
 // 3. Remove "cleanBefore" files/directories.
 gulp.task('build:setup', function () {
 
-  fs.removeSync(buildDrudge.config.distPath);
-  fs.removeSync(buildDrudge.config.distPathTemp);
-  fs.copySync(buildDrudge.config.srcPath, buildDrudge.config.distPath);
+  fs.removeSync($D.config.buildPath);
+  fs.copySync($D.config.srcPath, $D.config.buildPath);
 
   return gulp
-  .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.cleanBefore), {
-    base: buildDrudge.config.distPath,
+  .src(genSrc($D.config.buildPath, $D.config.cleanBefore), {
+    base: $D.config.buildPath,
     read: false
   })
   .pipe(vinylPaths(del));
@@ -384,174 +570,125 @@ gulp.task('build:setup', function () {
 // Compile Nunjucks templates. (use srcPath and cache the output templates also)
 gulp.task('build:templates', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.templates)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.srcPath, buildDrudge.config.templates.files), {
-      base: buildDrudge.config.srcPath
-    })
-    .pipe(change(nunjucksRender))
-    .pipe(rename(function (path) {
-      path.basename = path.basename.replace(buildDrudge.config.templates.identifier, '');
-    }))
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.srcPath, $D.config.templates.files), {
+    base: $D.config.srcPath
+  })
+  .pipe(change(nunjucksRender))
+  .pipe(rename(function (path) {
+    path.basename = path.basename.replace($D.config.templates.identifier, '');
+  }))
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
 // Compile source directory's Sass stylesheets to distribution directory.
 gulp.task('build:sass', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.sass)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.srcPath, buildDrudge.config.sass.files), {
-      base: buildDrudge.config.srcPath
-    })
-    .pipe(foreach(function (stream, file) {
-      var sassOpts = forceObj(buildDrudge.config.sass.options);
-      sassOpts.outFile = util.replaceExtension(path.basename(file.path), 'css');
-      return stream.pipe(sass(sassOpts));
-    }))
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.srcPath, $D.config.sass.files), {
+    base: $D.config.srcPath
+  })
+  .pipe(foreach(function (stream, file) {
+    var sassOpts = $D.config.sass.options;
+    sassOpts.outFile = util.replaceExtension(path.basename(file.path), 'css');
+    return stream.pipe(sass(sassOpts));
+  }))
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
 // Generate concatenated scripts and styles from useref markers in HTML files within the distribution folder. (cache output js and styles)
 gulp.task('build:collect-assets', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.collectAssets)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.collectAssets.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(useref())
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.buildPath, $D.config.collectAssets.files), {
+    base: $D.config.buildPath
+  })
+  .pipe(useref())
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
 // Minify all specified scripts in distribution folder.
 gulp.task('build:minify-js', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.minifyJs)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.minifyJs.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(uglify(forceObj(buildDrudge.config.minifyJs.options)))
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.buildPath, $D.config.minifyJs.files), {
+    base: $D.config.buildPath
+  })
+  .pipe(uglify($D.config.minifyJs.options))
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
 // Minify all specified html files in distribution folder.
 gulp.task('build:minify-html', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.minifyHtml)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.minifyHtml.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(change(minifyHtml))
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.buildPath, $D.config.minifyHtml.files), {
+    base: $D.config.buildPath
+  })
+  .pipe(change(minifyHtml))
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
 // Remove unused styles from all stylesheets.
 gulp.task('build:clean-css', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.cleanCss)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.cleanCss.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(uncss(forceObj(buildDrudge.config.cleanCss.options)))
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.buildPath, $D.config.cleanCss.files), {
+    base: $D.config.buildPath
+  })
+  .pipe(uncss($D.config.cleanCss.options))
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
 // Minify specified css files with cssnano.
 gulp.task('build:minify-css', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.minifyCss)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.minifyCss.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(cssnano())
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.buildPath, $D.config.minifyCss.files), {
+    base: $D.config.buildPath
+  })
+  .pipe(cssnano())
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
 // Generate sitemap.xml based on the HTML files in distribution directory.
 gulp.task('build:sitemap', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.sitemap)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.sitemap.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(sitemap(forceObj(buildDrudge.config.sitemap.options)))
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.buildPath, $D.config.sitemap.files), {
+    base: $D.config.buildPath
+  })
+  .pipe(sitemap($D.config.sitemap.options))
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
 // Generate browserconfig.xml as configured.
 gulp.task('build:browserconfig', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.browserconfig)) {
-
-    var data = js2xmlparser('browserconfig', {
-      'msapplication': {
-        'tile': {
-          'square70x70logo': {'@': {'src': buildDrudge.config.browserconfig.tile70x70}},
-          'square150x150logo': {'@': {'src': buildDrudge.config.browserconfig.tile150x150}},
-          'square310x150logo': {'@': {'src': buildDrudge.config.browserconfig.tile310x150}},
-          'square310x310logo': {'@': {'src': buildDrudge.config.browserconfig.tile310x310}},
-          'TileColor': buildDrudge.config.browserconfig.tileColor
-        }
+  var data = js2xmlparser('browserconfig', {
+    'msapplication': {
+      'tile': {
+        'square70x70logo': {'@': {'src': $D.config.browserconfig.tile70x70}},
+        'square150x150logo': {'@': {'src': $D.config.browserconfig.tile150x150}},
+        'square310x150logo': {'@': {'src': $D.config.browserconfig.tile310x150}},
+        'square310x310logo': {'@': {'src': $D.config.browserconfig.tile310x310}},
+        'TileColor': $D.config.browserconfig.tileColor
       }
-    });
+    }
+  });
 
-    fs.writeFile(buildDrudge.config.distPath + '/browserconfig.xml', data, function (err) {
-      if (err) cb(err);
-      cb();
-    });
-
-  }
-  else {
-
+  fs.writeFile($D.config.buildPath + '/browserconfig.xml', data, function (err) {
+    if (err) cb(err);
     cb();
-
-  }
+  });
 
 });
 
@@ -569,47 +706,68 @@ gulp.task('build:generate-images', function (cb) {
 // Optimize images as configured.
 gulp.task('build:optimize-images', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.optimizeImages)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.optimizeImages.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(imagemin(forceObj(buildDrudge.config.optimizeImages.options)))
-    .pipe(gulp.dest(buildDrudge.config.distPath));
-  }
-  else {
-    cb();
-  }
+  return gulp
+  .src(genSrc($D.config.buildPath, $D.config.optimizeImages.files), {
+    base: $D.config.buildPath
+  })
+  .pipe(imagemin($D.config.optimizeImages.options))
+  .pipe(gulp.dest($D.config.buildPath));
 
 });
 
-// Revision files and update occurences of revisioned files.
+// Revision files and references.
 gulp.task('build:revision', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.revision)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.revision.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(new revAll(forceObj(buildDrudge.config.revision.options)).revision())
-    .pipe(gulp.dest(buildDrudge.config.distPathTemp));
-  }
-  else {
+  var origFilePaths = [];
+  var newFilePaths = [];
+
+  gulp
+  .src(genSrc($D.config.buildPath, $D.config.revision.files), {
+    base: $D.config.buildPath
+  })
+  .pipe(change(function (content) {
+    origFilePaths.push(this.file.path);
+    return content;
+  }))
+  .pipe($D.revAll.revision())
+  .pipe(change(function (content) {
+    newFilePaths.push(this.file.path);
+    return content;
+  }))
+  .pipe(gulp.dest($D.config.buildPath))
+  .on('end', function () {
+
+    var junkFiles = [];
+    _.forEach(origFilePaths, function (origFilePath, i) {
+      if (origFilePath !== newFilePaths[i]) {
+        var formattedPath = '/' + path.relative($D.config.buildPath, origFilePath).split(path.sep).join('/')
+        junkFiles.push(formattedPath);
+      }
+    });
+
+    del.sync(genSrc($D.config.buildPath, junkFiles), {force: true});
     cb();
-  }
+
+  });
 
 });
 
-// 1. Remove temporary distribution directory.
-// 2. Remove "cleanAfter" files/directories.
+// 1. Atomize distribution directory if it exists.
+// 2. Rename temporary directory (if it exists) to distribution directory.
+// 3. Atomize all unwanted files/directories.
 gulp.task('build:clean', function (cb) {
 
-  fs.removeSync(buildDrudge.config.distPath);
-  fs.renameSync(buildDrudge.config.distPathTemp, buildDrudge.config.distPath);
+  if (pathExists($D.config.distPath)) {
+    fs.removeSync($D.config.distPath);
+  }
+
+  if (pathExists($D.config.buildPath)) {
+    fs.renameSync($D.config.buildPath, $D.config.distPath);
+  }
 
   return gulp
-  .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.cleanAfter), {
-    base: buildDrudge.config.distPath,
+  .src(genSrc($D.config.distPath, $D.config.cleanAfter), {
+    base: $D.config.distPath,
     read: false
   })
   .pipe(vinylPaths(del));
@@ -619,38 +777,41 @@ gulp.task('build:clean', function (cb) {
 // Validate HTML markup against W3C standards.
 gulp.task('post-build:validate-html', function (cb) {
 
-  if (_.isPlainObject(buildDrudge.config.validateHtml)) {
-    return gulp
-    .src(genSrc(buildDrudge.config.distPath, buildDrudge.config.validateHtml.files), {
-      base: buildDrudge.config.distPath
-    })
-    .pipe(w3cjs())
-    .pipe(w3cjsReporter());
-  }
-  else {
-    cb();
-  }
+  isOnline(function (err, online) {
 
-});
+    if (err) {
 
-// Validate source files.
-gulp.task('pre-build', function (cb) {
+      cb(err);
 
-  sequence('pre-build:validate-js', 'pre-build:lint-js', 'pre-build:lint-sass')(cb);
+    }
+    else if (!online) {
+
+      logSkipTask('post-build:validate-html', 'No Internet connection');
+      cb();
+
+    }
+    else {
+
+      gulp
+      .src(genSrc($D.config.distPath, $D.config.validateHtml.files), {
+        base: $D.config.distPath
+      })
+      .pipe(w3cjs())
+      .pipe(w3cjsReporter())
+      .on('end', function () {
+        cb();
+      });
+
+    }
+
+  });
 
 });
 
 // Build the distribution directory from the source files.
 gulp.task('build', function (cb) {
 
-  sequence('build:setup', 'build:templates', 'build:sass', 'build:collect-assets', 'build:minify-js', 'build:minify-html', 'build:clean-css', 'build:minify-css', 'build:generate-images', 'build:optimize-images', 'build:sitemap', 'build:browserconfig', 'build:revision', 'build:clean')(cb);
-
-});
-
-// Validate the distribution files.
-gulp.task('post-build', function (cb) {
-
-  sequence('post-build:validate-html')(cb);
+  sequence.apply(null, $D.tasks)(cb);
 
 });
 

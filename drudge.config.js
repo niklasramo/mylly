@@ -3,8 +3,9 @@
 // These variables offer an easy way to configure drudge quickly if you are happy with most of the
 // default settings.
 
-// Define src/dist paths.
+// Define source/build/dist directory paths.
 var srcPath = './src';
+var buildPath = './build';
 var distPath = './dist';
 
 // Define paths to asset directories.
@@ -42,6 +43,10 @@ var config = {};
 // Path to the source directory.
 // @type {String}
 config.srcPath = srcPath;
+
+// Path to the build directory.
+// @type {String}
+config.buildPath = buildPath;
 
 // Path to the distribution directory.
 // @type {String}
@@ -84,6 +89,10 @@ config.lintSass = {
 // Templates configuration. Set to null to disable.
 // @type {Object|Null}
 config.templates = {
+  // Define the files you want Nunjucks to process. The paths are relative to srcPath.
+  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
+  // @type {Array|String}
+  files: '/**/[^_]*' + tplIdentifier + '.html',
   // This string is used for identifying template files. The provided string is removed from the
   // compiled template's basename when processing templates.
   // @type {String}
@@ -91,10 +100,6 @@ config.templates = {
   // This string is used for identifying template context files.
   // @type {String}
   contextIdentifier: tplContextIdentifier,
-  // Define the files you want Nunjucks to process. The paths are relative to srcPath.
-  // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
-  // @type {Array|String}
-  files: '/**/[^_]*' + tplIdentifier + '.html',
   // Core template data which is provided for all templates as context data. Template specific data
   // (if any) is merged with this data. If the core and template data have identically named
   // properties the template data is preferred.
@@ -132,7 +137,7 @@ config.sass = {
 // @type {Object|Null}
 config.collectAssets = {
   // Define the HTML files you want to process for concatenation markers. The paths are relative to
-  // distPath.
+  // buildPath.
   // @type {Array|String}
   files: ['/**/*.html']
 };
@@ -140,7 +145,7 @@ config.collectAssets = {
 // JavaScript minification configuration. Set to null to disable.
 // @type {Object|Null}
 config.minifyJs = {
-  // Define the JavaScript files you want to minify. The paths are relative to distPath.
+  // Define the JavaScript files you want to minify. The paths are relative to buildPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: path.scripts + '/**/[dist.]*.js',
@@ -153,7 +158,7 @@ config.minifyJs = {
 // HTML minification configuration. Set to null to disable.
 // @type {Object|Null}
 config.minifyHtml = {
-  // Define the HTML files you want to minify. The paths are relative to distPath.
+  // Define the HTML files you want to minify. The paths are relative to buildPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: ['/**/*.html'],
@@ -168,7 +173,7 @@ config.minifyHtml = {
 // Remove unused styles. Set null to disable.
 // @type {Object|Null}
 config.cleanCss = {
-  // Define the CSS files you want to process. The paths are relative to distPath.
+  // Define the CSS files you want to process. The paths are relative to buildPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: '/**/[dist.]*.css',
@@ -176,7 +181,7 @@ config.cleanCss = {
   // https://github.com/ben-eb/gulp-uncss#options
   // @type {Object}
   options: {
-    html: [distPath + '/**/*.html'],
+    html: [buildPath + '/**/*.html'],
     ignore: []
   }
 };
@@ -184,7 +189,7 @@ config.cleanCss = {
 // Minify styles. Set null to disable.
 // @type {Object|Null}
 config.minifyCss = {
-  // Define the CSS files you want to process. The paths are relative to distPath.
+  // Define the CSS files you want to process. The paths are relative to buildPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: '/**/[dist.]*.css',
@@ -197,7 +202,7 @@ config.minifyCss = {
 // Auto-generate sitemap.xml. Set null to disable.
 // @type {Object|Null}
 config.sitemap = {
-  // Define the files you want to include in the sitemap. The paths are relative to distPath.
+  // Define the files you want to include in the sitemap. The paths are relative to buildPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: ['/**/*.html'],
@@ -244,7 +249,7 @@ config.generateImages = [
 // Image optimization configuration. Set to null to disable.
 // @type {Object|Null}
 config.optimizeImages = {
-  // Define the image files you want to optimize. The paths are relative to distPath.
+  // Define the image files you want to optimize. The paths are relative to buildPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: '/**/*.{jpg,png,gif,svg}',
@@ -257,11 +262,11 @@ config.optimizeImages = {
 // Revisioning configuration. Set to null to disable.
 // @type {Object|Null}
 config.revision = {
-  // Define the files you want the revision system to process. The paths are relative to distPath.
+  // Define the files you want the revision system to process. The paths are relative to buildPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: [
-    '/**',
+    '/**/*',
     '!' + path.styles + '/**/*.s+(a|c)ss'
   ],
   // Revision system options.
@@ -290,7 +295,7 @@ config.validateHtml = {
 // define files and directories which should be removed from the distribution directory before the
 // build process starts. All the paths are relative to the distribution directory.
 // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
-// @type {Array|String}
+// @type {Array|String|Null}
 config.cleanBefore = [
   // Clean all template files and their context files.
   '/**/*' + tplIdentifier + '.html',
@@ -304,7 +309,7 @@ config.cleanBefore = [
 // This settings allows you to define which files and folders to remove after the build process.
 // All the paths are relative to the distribution directory.
 // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
-// @type {Array|String}
+// @type {Array|String|Null}
 config.cleanAfter = [
   // Clean all image templates.
   path.images + '/templates',
