@@ -30,9 +30,9 @@ var templateData = {
   googleAnalyticsUa: '' // UA-XXXXXX-XX
 };
 
-// Define Nunjucks template identifier.
-var tplIdentifier = '.tpl';
-var tplContextIdentifier = '.ctx';
+// Define Nunjucks template and template context identifiers.
+var tplId = '.tpl';
+var tplContextId = '.ctx';
 
 // Advanced confiquration
 // **********************
@@ -92,14 +92,14 @@ config.templates = {
   // Define the files you want Nunjucks to process. The paths are relative to srcPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
-  files: '/**/[^_]*' + tplIdentifier + '.html',
+  files: '/**/[^_]*' + tplId + '.html',
   // This string is used for identifying template files. The provided string is removed from the
   // compiled template's basename when processing templates.
   // @type {String}
-  identifier: tplIdentifier,
+  id: tplId,
   // This string is used for identifying template context files.
   // @type {String}
-  contextIdentifier: tplContextIdentifier,
+  contextId: tplContextId,
   // Core template data which is provided for all templates as context data. Template specific data
   // (if any) is merged with this data. If the core and template data have identically named
   // properties the template data is preferred.
@@ -290,6 +290,10 @@ config.validateHtml = {
   options: {}
 };
 
+// Show build report after a succesful build in the console.
+// @type {Boolean}
+config.report = true;
+
 // The build process starts with atomizing the distribution directory after which the source
 // directory is cloned as the base for the distribution directory. This settings allows you to
 // define files and directories which should be removed from the distribution directory before the
@@ -298,9 +302,9 @@ config.validateHtml = {
 // @type {Array|String|Null}
 config.cleanBefore = [
   // Clean all template files and their context files.
-  '/**/*' + tplIdentifier + '.html',
-  '/**/*' + tplIdentifier + tplContextIdentifier + '.json',
-  '/**/*' + tplIdentifier + tplContextIdentifier + '.js',
+  '/**/*' + tplId + '.html',
+  '/**/*' + tplId + tplContextId + '.json',
+  '/**/*' + tplId + tplContextId + '.js',
   // Clean config files.
   '/.jscsrc',
   '/sass-lint.yml'

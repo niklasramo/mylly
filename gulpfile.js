@@ -1,21 +1,59 @@
-// TODO for v0.1.0
-// ---------------
-// * CSS/JS sourcemaps.
-// * Check that gulp negation works as assumed.
-// * Esprima + JSCS -> ESLint.
-// * Drudge should strive to become a flat file CMS embracing future standards. Grav is an awesome ffcms example.
-// * Explain the build process in the readme with pointers to configurations.
-// * Generate multisize favicon.ico (16+24+32+48).
-// * Explore another HTML linter: https://www.npmjs.com/package/gulp-htmlhint another alternative/parallel linter.
-// * Babel integration (Maybe this is a bad idea, debugging transformed code sounds like a massive PITA).
-// * Generate site SEO/PS report (page by page).
-//   * PageSpeed insights (node psi module).
-//   * SEO analysis (a mixture of node modules).
-//     * Check h1 tag existence (warn if more than one exists or none exist).
-//     * Check title and description meta tags (warn if missing or empty).
-//     * Check page crawlability (robots.txt / <meta name="robots" content="noindex, nofollow">).
-//     * Check image alt tags (warn if missing or empty).
-//     * Check for broken links (warn if broken).
+/*
+
+Design goals
+============
+
+* Tagline: Highly configurable static site/app/blog/whatever generator.
+* Gulp based file streaming that allows hooking into the stream.
+* Easy to use and configure with good presets.
+* Fast builds. Use advanced file caching techniques to maximize the build speed.
+* Everything is optional. At minimun configuration Drudge should only clone the
+  source directory and nothing else.
+
+v0.1.0
+======
+  * [x] Caching to improve build speed.
+  * [] Quick info snippets between task start/end to communicate what happened.
+       For example, "minified 2 files: 12kb -> 3kb"
+  * [] Consider leaning towards magic and conventions instead of configuration.
+  * [] Internal improvements.
+    * [] https://github.com/szwacz/fs-jetpack
+    * [] https://github.com/sindresorhus/globby
+    * [] Better promises -> Bluebird
+  * [] Replace Esprima and JSCS with ESLint.
+  * [] Better error handling.
+    * [] https://github.com/AriaMinaei/pretty-error
+  * [] Create a nice API for the build flow that allows plugging custom
+       functionality between the build steps.
+  * [x] Build report -> files and their sizes in the command line.
+  * [] Basic speed report -> Page by page size report (divided into total size
+       per asset type, e.g. scripts, styles, images).
+  * [] Basic SEO report -> Page by page SEO report.
+  * [] The default src directory should demonstrate all features.
+  * [] Scaffolding. Allow easy way to init custom project bases.
+  * [] Docs and readme.
+  * [] Github pages website, naturally built with Drduge ;)
+  * [] Unit tests.
+
+v0.2.0
+======
+  * [] Nunjucks powerups
+    * [] moment.js -> https://www.npmjs.com/package/nunjucks-date-filter
+    * [] i18n -> https://www.npmjs.com/package/nunjucks-i18n
+  * [] Make sure Drudge plays nicely with Angular/React projects.
+  * [] CSS/JS sourcemaps.
+  * [] Generate multisize favicon.ico (16+24+32+48).
+  * [] Offline HTML validator.
+  * [] Babel integration (Maybe this is a bad idea, debugging transformed code
+       sounds like a massive PITA).
+  * [] Autoprefixer. Needs a lot of consideration since using it may turn out to
+       be a debug nightmare. There are still some open issues the developer
+       needs to be aware about and CSS hacks might get broken during the
+       post-processing process.
+  * [] Allow user to define the CSS pre/post processor engine:
+       Less/Sass/PostCSS
+
+*/
 
 //
 // Modules
@@ -37,6 +75,8 @@ var through2 = require('through2');
 var js2xmlparser = require("js2xmlparser");
 var vinylPaths = require('vinyl-paths');
 var isOnline = require('is-online');
+var lazypipe = require('lazypipe');
+var filesize = require('filesize');
 var gulp = require('gulp');
 var util = require('gulp-util');
 var sass = require('gulp-sass');
@@ -54,7 +94,6 @@ var w3cjs = require('gulp-w3cjs');
 var imagemin = require('gulp-imagemin');
 var sitemap = require('gulp-sitemap');
 var uncss = require('gulp-uncss');
-var plumber = require('gulp-plumber');
 var cache = require('gulp-cached');
 var rename = require('gulp-rename');
 var cssnano = require('gulp-cssnano');
@@ -82,7 +121,8 @@ var taskQueue = [
   'build:optimize-images',
   'build:revision',
   'build:clean',
-  'post-build:validate-html'
+  'post-build:validate-html',
+  'post-build:report'
 ];
 
 // Configuration option properties matcing the task queue execution order.
@@ -105,7 +145,8 @@ var taskPredicates = [
   'optimizeImages',
   'revision',
   null,
-  'validateHtml'
+  'validateHtml',
+  'report'
 ];
 
 var allowedConfigTypes = {
@@ -125,8 +166,8 @@ var allowedConfigTypes = {
   }],
   templates: ['object|null', {
     files: ['array|string'],
-    identifier: ['string'],
-    contextIdentifier: ['string'],
+    id: ['string'],
+    contextId: ['string'],
     data: ['object|null'],
     markdown: ['object|null'],
     options: ['object']
@@ -178,6 +219,7 @@ var allowedConfigTypes = {
     files: ['array|string'],
     options: ['object']
   }],
+  report: ['boolean'],
   cleanBefore: ['array|string'],
   cleanAfter: ['array|string'],
   browsersync: ['object']
@@ -240,6 +282,11 @@ Drudge.prototype._setup = function () {
   var inst = this;
 
   return new Promise(function (res) {
+
+    // Clear file cache if build instance is changed.
+    if ($D !== inst) {
+      cache.caches = {};
+    }
 
     // Setup build instance.
     $D = inst;
@@ -436,14 +483,14 @@ function getTemplateData(file) {
 
   // Get JSON context file.
   var tplJsonData = path.parse(file.path);
-  tplJsonData.name = tplJsonData.name + $D.config.templates.contextIdentifier;
+  tplJsonData.name = tplJsonData.name + $D.config.templates.contextId;
   tplJsonData.ext = '.json';
   tplJsonData.base = tplJsonData.name + tplJsonData.ext;
   tplJsonData = getFileData(path.format(tplJsonData));
 
   // Get JS context file.
   var tplJsData = path.parse(file.path);
-  tplJsData.name = tplJsData.name + $D.config.templates.contextIdentifier;
+  tplJsData.name = tplJsData.name + $D.config.templates.contextId;
   tplJsData.ext = '.js';
   tplJsData.base = tplJsData.name + tplJsData.ext;
   tplJsData = getFileData(path.format(tplJsData));
@@ -521,6 +568,7 @@ gulp.task('pre-build:validate-js', function (cb) {
   .src(genSrc($D.config.srcPath, $D.config.validateJs.files), {
     base: $D.config.srcPath
   })
+  .pipe(cache($D.id + '-validate-js'))
   .pipe(jsValidate());
 
 });
@@ -532,6 +580,7 @@ gulp.task('pre-build:lint-js', function (cb) {
   .src(genSrc($D.config.srcPath, $D.config.lintJs.files), {
     base: $D.config.srcPath
   })
+  .pipe(cache($D.id + '-lint-js'))
   .pipe(jscs({configPath: $D.config.lintJs.configPath}))
   .pipe(jscs.reporter());
 
@@ -544,6 +593,7 @@ gulp.task('pre-build:lint-sass', function (cb) {
   .src(genSrc($D.config.srcPath, $D.config.lintSass.files), {
     base: $D.config.srcPath
   })
+  .pipe(cache($D.id + '-lint-sass'))
   .pipe(sassLint(yamljs.load($D.config.lintSass.configPath)))
   .pipe(sassLint.format())
   .pipe(sassLint.failOnError());
@@ -574,9 +624,10 @@ gulp.task('build:templates', function (cb) {
   .src(genSrc($D.config.srcPath, $D.config.templates.files), {
     base: $D.config.srcPath
   })
+  .pipe(cache($D.id + '-templates'))
   .pipe(change(nunjucksRender))
   .pipe(rename(function (path) {
-    path.basename = path.basename.replace($D.config.templates.identifier, '');
+    path.basename = path.basename.replace($D.config.templates.id, '');
   }))
   .pipe(gulp.dest($D.config.buildPath));
 
@@ -589,6 +640,7 @@ gulp.task('build:sass', function (cb) {
   .src(genSrc($D.config.srcPath, $D.config.sass.files), {
     base: $D.config.srcPath
   })
+  .pipe(cache($D.id + '-sass'))
   .pipe(foreach(function (stream, file) {
     var sassOpts = $D.config.sass.options;
     sassOpts.outFile = util.replaceExtension(path.basename(file.path), 'css');
@@ -716,12 +768,12 @@ gulp.task('build:optimize-images', function (cb) {
 });
 
 // Revision files and references.
-gulp.task('build:revision', function (cb) {
+gulp.task('build:revision', function () {
 
   var origFilePaths = [];
   var newFilePaths = [];
 
-  gulp
+  return gulp
   .src(genSrc($D.config.buildPath, $D.config.revision.files), {
     base: $D.config.buildPath
   })
@@ -746,7 +798,6 @@ gulp.task('build:revision', function (cb) {
     });
 
     del.sync(genSrc($D.config.buildPath, junkFiles), {force: true});
-    cb();
 
   });
 
@@ -778,31 +829,83 @@ gulp.task('build:clean', function (cb) {
 gulp.task('post-build:validate-html', function (cb) {
 
   isOnline(function (err, online) {
-
     if (err) {
-
       cb(err);
-
     }
     else if (!online) {
-
       logSkipTask('post-build:validate-html', 'No Internet connection');
       cb();
-
     }
     else {
+      sequence('post-build:validate-html-run')(cb);
+    }
+  });
 
-      gulp
-      .src(genSrc($D.config.distPath, $D.config.validateHtml.files), {
-        base: $D.config.distPath
-      })
-      .pipe(w3cjs())
-      .pipe(w3cjsReporter())
-      .on('end', function () {
-        cb();
+});
+
+// Validate HTML markup against W3C standards.
+gulp.task('post-build:validate-html-run', function () {
+
+  return gulp
+  .src(genSrc($D.config.distPath, $D.config.validateHtml.files), {
+    base: $D.config.distPath
+  })
+  .pipe(w3cjs())
+  .pipe(w3cjsReporter());
+
+});
+
+gulp.task('post-build:report', function () {
+
+  var report = {
+    totalSize: 0,
+    totalAmount: 0,
+    files: {}
+  };
+
+  return gulp
+  .src(genSrc($D.config.distPath, '/**/*'), {
+    base: $D.config.distPath
+  })
+  .pipe(through2.obj(function (file, enc, cb) {
+    if (file.stat.isFile()) {
+      var filePath = path.relative($D.config.distPath, file.path);
+      var fileSize = file.stat.size;
+      var fileType = path.extname(file.path);
+      report.totalSize += fileSize;
+      report.totalAmount += 1;
+      report.files[fileType] = report.files[fileType] || [];
+      report.files[fileType].push({
+        path: filePath,
+        size: fileSize
+      });
+    }
+    cb(null, file);
+  }))
+  .on('end', function () {
+
+    util.log('');
+    util.log('Build report');
+    util.log(util.colors.gray('------------'));
+    util.log('');
+    util.log('A total of ' + util.colors.cyan(report.totalAmount) + ' files weighing ' + util.colors.magenta(filesize(report.totalSize, {round: 0})) + ' were generated.');
+    util.log('');
+
+    _.forEach(report.files, function (fileTypeData, fileType) {
+
+      var fileTypeSize = filesize(_.reduce(fileTypeData, function (total, val) {
+        return total + val.size;
+      }, 0), {round: 0});
+
+      util.log(util.colors.green(fileType), util.colors.cyan(fileTypeData.length), util.colors.magenta(fileTypeSize));
+
+      _.forEach(fileTypeData, function (fileData) {
+        util.log('  ' + fileData.path, util.colors.magenta(filesize(fileData.size, {round: 0})));
       });
 
-    }
+    });
+
+    util.log('');
 
   });
 
