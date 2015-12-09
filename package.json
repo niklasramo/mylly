@@ -1,15 +1,11 @@
 {
-  "name": "drudge",
-  "version": "0.0.13",
+  "name": "mylly",
+  "version": "0.0.14",
   "description": "Static site generator.",
   "main": "gulpfile.js",
-  "homepage": "https://github.com/niklasramo/gulp-drudge",
   "repository": {
     "type": "git",
-    "url": "git@github.com:niklasramo/gulp-drudge.git"
-  },
-  "scripts": {
-    "start": "gulp server"
+    "url": "git@github.com:niklasramo/mylly.git"
   },
   "author": "Niklas Rämö <inramo@gmail.com> (https://github.com/niklasramo)",
   "license": "MIT",
@@ -23,11 +19,10 @@
     "gulp-cached": "^1.1.0",
     "gulp-change": "~1.0.0",
     "gulp-cssnano": "^2.0.0",
+    "gulp-eslint": "^1.1.1",
     "gulp-foreach": "~0.1.0",
     "gulp-if": "~2.0.0",
     "gulp-imagemin": "~2.4.0",
-    "gulp-jscs": "~3.0.2",
-    "gulp-jsvalidate": "~2.1.0",
     "gulp-nunjucks-render": "~1.0.0",
     "gulp-rename": "^1.2.2",
     "gulp-rev-all": "~0.8.22",

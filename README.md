@@ -1,6 +1,6 @@
-# drudge
+# factotum
 
-Drudge is an opinionated static site generator for Node.js. This project started out as a gulp boilerplate, but has evolved into a node module. The aim here is to build a module that cn automate everything that can be automated (related to building static web sites) purely with Node. Please note that this module is actively developed and not ready for production yet.
+Factotum is an opinionated static site generator for Node.js. This project started out as a gulp boilerplate, but has evolved into a node module. The aim here is to build a module that cn automate everything that can be automated (related to building static web sites) purely with Node. Please note that this module is actively developed and not ready for production yet.
 
 ##Features
 
@@ -16,27 +16,22 @@ Drudge is an opinionated static site generator for Node.js. This project started
 * Revisions files.
 * BrowserSync development server.
 
-**Coming up...**
-
-* Page by page SEO and page speed analysis.
-* Tests.
-
 ##Install
 
-`npm install drudge --save-dev`
+Coming up...
 
 ##Usage
 
 ```javascript
-var drudge = require('drudge');
+var factotum = require('factotum');
 
-// Create a drudge instance with path to configuration file.
+// Create a factotum instance with path to configuration file.
 // Alternatively you can provide the conffiguration object
 // directly here.
-var prod = drudge('./drudge.prod.js');
+var prod = factotum('./drudge.prod.js');
 
 // Optionally create another drudge instance with other configuration.
-var dev = drudge('./drudge.dev.js');
+var dev = factotum('./drudge.dev.js');
 
 // Clones the default source directory and drudge
 // configuration file to your project root.

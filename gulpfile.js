@@ -12,35 +12,27 @@ Design goals
 
 v0.1.0
 ======
-  * [x] Caching to improve build speed.
-  * [] Quick info snippets between task start/end to communicate what happened.
-       For example, "minified 2 files: 12kb -> 3kb"
-  * [] Consider leaning towards magic and conventions instead of configuration.
-  * [] Internal improvements.
-    * [] https://github.com/szwacz/fs-jetpack
-    * [] https://github.com/sindresorhus/globby
-    * [] Better promises -> Bluebird
-  * [] Replace Esprima and JSCS with ESLint.
-  * [] Better error handling.
-    * [] https://github.com/AriaMinaei/pretty-error
-  * [] Create a nice API for the build flow that allows plugging custom
-       functionality between the build steps.
   * [x] Build report -> files and their sizes in the command line.
-  * [] Basic speed report -> Page by page size report (divided into total size
-       per asset type, e.g. scripts, styles, images).
-  * [] Basic SEO report -> Page by page SEO report.
-  * [] The default src directory should demonstrate all features.
-  * [] Scaffolding. Allow easy way to init custom project bases.
-  * [] Docs and readme.
-  * [] Github pages website, naturally built with Drduge ;)
-  * [] Unit tests.
+  * [x] Caching to improve build speed.
+  * [x] Replace Esprima and JSCS with ESLint.
+  * [x] Scaffolding. Allow easy way to init custom project bases.
+  * [ ] File activity reporting. Log stuff that happens in tasks. And make it
+        optional.
+  * [ ] Create a nice API for the build flow that allows plugging custom
+        functionality between the build steps.
+  * [ ] Make sure Drudge plays nicely with Angular/React projects.
+  * [ ] Easier (more restricted) configuration. Consider leaning towards magic
+        and conventions instead of configuration.
+  * [ ] The default src directory should demonstrate all features.
+  * [ ] Docs and readme.
+  * [ ] Github pages website, naturally built with Drudge ;)
+  * [ ] Unit tests.
 
 v0.2.0
 ======
   * [] Nunjucks powerups
     * [] moment.js -> https://www.npmjs.com/package/nunjucks-date-filter
     * [] i18n -> https://www.npmjs.com/package/nunjucks-i18n
-  * [] Make sure Drudge plays nicely with Angular/React projects.
   * [] CSS/JS sourcemaps.
   * [] Generate multisize favicon.ico (16+24+32+48).
   * [] Offline HTML validator.
@@ -52,6 +44,9 @@ v0.2.0
        post-processing process.
   * [] Allow user to define the CSS pre/post processor engine:
        Less/Sass/PostCSS
+  * [] Basic speed report -> Page by page size report (divided into total size
+       per asset type, e.g. scripts, styles, images).
+  * [] Basic SEO report -> Page by page SEO report.
 
 */
 
@@ -87,9 +82,7 @@ var gulpif = require('gulp-if');
 var sequence = require('gulp-sequence');
 var foreach = require('gulp-foreach');
 var revAll = require('gulp-rev-all');
-var jscs = require('gulp-jscs');
 var change = require('gulp-change');
-var jsValidate = require('gulp-jsvalidate');
 var w3cjs = require('gulp-w3cjs');
 var imagemin = require('gulp-imagemin');
 var sitemap = require('gulp-sitemap');
@@ -97,68 +90,45 @@ var uncss = require('gulp-uncss');
 var cache = require('gulp-cached');
 var rename = require('gulp-rename');
 var cssnano = require('gulp-cssnano');
+var eslint = require('gulp-eslint');
 
 //
 // Local variables
 //
 
-// The build tasks in the correct exection order.
+// The build tasks (and their dependencies) in the exection order. The first
+// item in the build task item array represents the gulp task's name and the
+// following items represent which properties (if any) must exist in the
+// Mylly configuration object as truthy value in order for the task to be
+// included in the Mylly instance's build tasks.
 var taskQueue = [
-  'pre-build:validate-js',
-  'pre-build:lint-js',
-  'pre-build:lint-sass',
-  'build:setup',
-  'build:templates',
-  'build:sass',
-  'build:collect-assets',
-  'build:minify-js',
-  'build:minify-html',
-  'build:clean-css',
-  'build:minify-css',
-  'build:sitemap',
-  'build:browserconfig',
-  'build:generate-images',
-  'build:optimize-images',
-  'build:revision',
-  'build:clean',
-  'post-build:validate-html',
-  'post-build:report'
-];
-
-// Configuration option properties matcing the task queue execution order.
-// This list is used to check which build tasks are to be ignored.
-var taskPredicates = [
-  'validateJs',
-  'lintJs',
-  'lintSass',
-  null,
-  'templates',
-  'sass',
-  'collectAssets',
-  'minifyJs',
-  'minifyHtml',
-  'cleanCss',
-  'minifyCss',
-  'sitemap',
-  'browserconfig',
-  'generateImages',
-  'optimizeImages',
-  'revision',
-  null,
-  'validateHtml',
-  'report'
+  ['pre-build:lint-js', 'lintJs'],
+  ['pre-build:lint-sass', 'lintSass'],
+  ['build:setup'],
+  ['build:templates', 'templates'],
+  ['build:sass', 'sass'],
+  ['build:collect-assets', 'collectAssets'],
+  ['build:minify-js', 'minifyJs'],
+  ['build:minify-html', 'minifyHtml'],
+  ['build:clean-css', 'cleanCss'],
+  ['build:minify-css', 'minifyCss'],
+  ['build:sitemap', 'sitemap'],
+  ['build:browserconfig', 'browserconfig'],
+  ['build:generate-images', 'generateImages'],
+  ['build:optimize-images', 'optimizeImages'],
+  ['build:revision', 'revision'],
+  ['build:clean'],
+  ['post-build:validate-html', 'validateHtml'],
+  ['post-build:report', 'report']
 ];
 
 var allowedConfigTypes = {
   srcPath: ['string'],
   buildPath: ['string'],
   distPath: ['string'],
-  validateJs: ['object|null', {
-    files: ['array|string']
-  }],
   lintJs: ['object|null', {
     files: ['array|string'],
-    configPath: ['string']
+    options: ['object|string']
   }],
   lintSass: ['object|null', {
     files: ['array|string'],
@@ -228,31 +198,31 @@ var allowedConfigTypes = {
 // Get project root path.
 var projectRoot = __dirname;
 
-// Drudge configuration file path (relative).
-var configPath = '/drudge.config.js';
+// Mylly configuration file path (relative).
+var configPath = '/mylly.config.js';
 
-// Get drudge base configuration.
+// Get mylly base configuration.
 var baseCfg = getFileData(projectRoot + configPath);
 
 // Build queue.
 var $Q = Promise.resolve();
 
-// Currently active Drudge instance.
+// Currently active Mylly instance.
 var $D;
 
-// Drudge instance id
-var DrudgeId = 0;
+// Mylly instance id
+var MyllyId = 0;
 
 //
-// Drudge constructor
+// Mylly constructor
 //
 
-function Drudge(opts) {
+function Mylly(opts) {
 
   var inst = this;
 
   // Generate id for the instance.
-  inst.id = ++DrudgeId;
+  inst.id = ++MyllyId;
 
   // Sanitize options.
   opts = _.isPlainObject(opts) ? opts : _.isString(opts) ? getFileData(opts) : {};
@@ -270,14 +240,20 @@ function Drudge(opts) {
   inst.revAll = new revAll(inst.config.revision ? inst.config.revision.options : {});
 
   // Build task queue.
-  inst.tasks = _.remove(taskQueue.slice(0), function (taskName, i) {
-    var predicate = taskPredicates[i];
-    return predicate === null ? true : !!inst.config[predicate];
-  });
+  inst.tasks = _.chain(taskQueue.slice(0))
+  .filter(function (taskItem) {
+    return _.reduce(taskItem.slice(1), function (result, cfgProp) {
+      return result ? !!inst.config[cfgProp] : result;
+    }, true);
+  })
+  .map(function (val) {
+    return val[0];
+  })
+  .value();
 
 }
 
-Drudge.prototype._setup = function () {
+Mylly.prototype._setup = function () {
 
   var inst = this;
 
@@ -303,7 +279,7 @@ Drudge.prototype._setup = function () {
 
 };
 
-Drudge.prototype.init = function () {
+Mylly.prototype.init = function () {
 
   var inst = this;
 
@@ -323,7 +299,7 @@ Drudge.prototype.init = function () {
 
 };
 
-Drudge.prototype.build = function () {
+Mylly.prototype.build = function () {
 
   var inst = this;
 
@@ -352,7 +328,7 @@ Drudge.prototype.build = function () {
 
 };
 
-Drudge.prototype.server = function () {
+Mylly.prototype.server = function () {
 
   var inst = this;
 
@@ -394,6 +370,7 @@ function validateOptionBranch(treeBranch, optsBranch) {
     nestedRules = val[1];
 
     if (!typeCheck(optionValue, allowedValues)) {
+      console.log(key);
       throw new TypeError('Configuration object has bad data.');
     }
 
@@ -529,31 +506,45 @@ function w3cjsReporter() {
 
 }
 
-function generateImages() {
-
-  var promises = [];
-  var sets = ($D.config.generateImages || []);
-
-  sets.forEach(function (set) {
-    set.sizes.forEach(function (size) {
-      var sourcePath = $D.config.buildPath + set.source;
-      var targetPath = $D.config.buildPath + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]);
-      if (!pathExists(targetPath)) {
-        var promise = jimp.read(sourcePath).then(function (img) {
-          return img.resize(size[0], size[1]).write(targetPath);
-        });
-        promises.push(promise);
-      }
-    });
-  });
-
-  return Promise.all(promises);
-
-}
-
 function logSkipTask(taskName, reason) {
 
   util.log(util.colors.yellow("Skipping"), "'" + util.colors.cyan(taskName) + "'", util.colors.red(reason));
+
+}
+
+function getNicePath(from, to) {
+
+  return path.normalize(from + '/' + path.relative(from, to))
+
+}
+
+function logFiles(rootPath, action, fileTypes) {
+
+  var msg, color;
+
+  if (action === 'edit') {
+    msg = '>';
+    color = 'yellow';
+  }
+
+  if (action === 'remove') {
+    msg = 'x';
+    color = 'red';
+  }
+
+  if (action === 'create') {
+    msg = '+';
+    color = 'green';
+  }
+
+  return through2.obj(function (file, enc, cb) {
+    var fileType = fileTypes ? path.extname(file.path) : false;
+    var isCorrectFileType = fileTypes ? fileType && fileTypes.indexOf(fileType) > -1 : true;
+    if (file.stat && file.stat.isFile() && isCorrectFileType) {
+      util.log(msg, util.colors[color](getNicePath(rootPath || './', file.path)));
+    }
+    cb(null, file);
+  });
 
 }
 
@@ -561,19 +552,7 @@ function logSkipTask(taskName, reason) {
 // Tasks
 //
 
-// Check all JavaScript files for syntax errors.
-gulp.task('pre-build:validate-js', function (cb) {
-
-  return gulp
-  .src(genSrc($D.config.srcPath, $D.config.validateJs.files), {
-    base: $D.config.srcPath
-  })
-  .pipe(cache($D.id + '-validate-js'))
-  .pipe(jsValidate());
-
-});
-
-// Make sure that JavaScript files are written in correct style.
+// Lint JavaScript files.
 gulp.task('pre-build:lint-js', function (cb) {
 
   return gulp
@@ -581,8 +560,10 @@ gulp.task('pre-build:lint-js', function (cb) {
     base: $D.config.srcPath
   })
   .pipe(cache($D.id + '-lint-js'))
-  .pipe(jscs({configPath: $D.config.lintJs.configPath}))
-  .pipe(jscs.reporter());
+  .pipe(eslint($D.config.lintJs.options))
+  .pipe(eslint.format())
+  .pipe(eslint.failAfterError())
+  .pipe(logFiles($D.config.srcPath, 'edit'));
 
 });
 
@@ -596,7 +577,8 @@ gulp.task('pre-build:lint-sass', function (cb) {
   .pipe(cache($D.id + '-lint-sass'))
   .pipe(sassLint(yamljs.load($D.config.lintSass.configPath)))
   .pipe(sassLint.format())
-  .pipe(sassLint.failOnError());
+  .pipe(sassLint.failOnError())
+  .pipe(logFiles($D.config.srcPath, 'edit'));
 
 });
 
@@ -613,6 +595,7 @@ gulp.task('build:setup', function () {
     base: $D.config.buildPath,
     read: false
   })
+  .pipe(logFiles($D.config.buildPath, 'edit'))
   .pipe(vinylPaths(del));
 
 });
@@ -624,12 +607,13 @@ gulp.task('build:templates', function (cb) {
   .src(genSrc($D.config.srcPath, $D.config.templates.files), {
     base: $D.config.srcPath
   })
-  .pipe(cache($D.id + '-templates'))
+  .pipe(logFiles($D.config.srcPath, 'edit'))
   .pipe(change(nunjucksRender))
   .pipe(rename(function (path) {
     path.basename = path.basename.replace($D.config.templates.id, '');
   }))
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(gulp.dest($D.config.buildPath))
+  .pipe(logFiles($D.config.buildPath, 'create'));
 
 });
 
@@ -640,24 +624,27 @@ gulp.task('build:sass', function (cb) {
   .src(genSrc($D.config.srcPath, $D.config.sass.files), {
     base: $D.config.srcPath
   })
-  .pipe(cache($D.id + '-sass'))
+  .pipe(logFiles($D.config.srcPath, 'edit'))
   .pipe(foreach(function (stream, file) {
     var sassOpts = $D.config.sass.options;
     sassOpts.outFile = util.replaceExtension(path.basename(file.path), 'css');
     return stream.pipe(sass(sassOpts));
   }))
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(gulp.dest($D.config.buildPath))
+  .pipe(logFiles($D.config.buildPath, 'create'));
 
 });
 
-// Generate concatenated scripts and styles from useref markers in HTML files within the distribution folder. (cache output js and styles)
+// Generate concatenated scripts and styles from useref markers in HTML files within the distribution folder.
 gulp.task('build:collect-assets', function (cb) {
 
   return gulp
   .src(genSrc($D.config.buildPath, $D.config.collectAssets.files), {
     base: $D.config.buildPath
   })
+  .pipe(logFiles($D.config.buildPath, 'edit'))
   .pipe(useref())
+  .pipe(logFiles($D.config.buildPath, 'create', ['.js', '.css']))
   .pipe(gulp.dest($D.config.buildPath));
 
 });
@@ -669,6 +656,7 @@ gulp.task('build:minify-js', function (cb) {
   .src(genSrc($D.config.buildPath, $D.config.minifyJs.files), {
     base: $D.config.buildPath
   })
+  .pipe(logFiles($D.config.buildPath, 'edit'))
   .pipe(uglify($D.config.minifyJs.options))
   .pipe(gulp.dest($D.config.buildPath));
 
@@ -681,18 +669,20 @@ gulp.task('build:minify-html', function (cb) {
   .src(genSrc($D.config.buildPath, $D.config.minifyHtml.files), {
     base: $D.config.buildPath
   })
+  .pipe(logFiles($D.config.buildPath, 'edit'))
   .pipe(change(minifyHtml))
   .pipe(gulp.dest($D.config.buildPath));
 
 });
 
-// Remove unused styles from all stylesheets.
+// Remove unused styles from specified stylesheets.
 gulp.task('build:clean-css', function (cb) {
 
   return gulp
   .src(genSrc($D.config.buildPath, $D.config.cleanCss.files), {
     base: $D.config.buildPath
   })
+  .pipe(logFiles($D.config.buildPath, 'edit'))
   .pipe(uncss($D.config.cleanCss.options))
   .pipe(gulp.dest($D.config.buildPath));
 
@@ -705,6 +695,7 @@ gulp.task('build:minify-css', function (cb) {
   .src(genSrc($D.config.buildPath, $D.config.minifyCss.files), {
     base: $D.config.buildPath
   })
+  .pipe(logFiles($D.config.buildPath, 'edit'))
   .pipe(cssnano())
   .pipe(gulp.dest($D.config.buildPath));
 
@@ -717,12 +708,16 @@ gulp.task('build:sitemap', function (cb) {
   .src(genSrc($D.config.buildPath, $D.config.sitemap.files), {
     base: $D.config.buildPath
   })
+  .pipe(logFiles($D.config.buildPath, 'edit'))
   .pipe(sitemap($D.config.sitemap.options))
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(gulp.dest($D.config.buildPath))
+  .on('end', function () {
+    util.log('+', util.colors.green(getNicePath($D.config.buildPath, $D.config.buildPath + '/sitemap.xml')));
+  });
 
 });
 
-// Generate browserconfig.xml as configured.
+// Generate browserconfig.xml.
 gulp.task('build:browserconfig', function (cb) {
 
   var data = js2xmlparser('browserconfig', {
@@ -739,29 +734,70 @@ gulp.task('build:browserconfig', function (cb) {
 
   fs.writeFile($D.config.buildPath + '/browserconfig.xml', data, function (err) {
     if (err) cb(err);
+    util.log('+', util.colors.green(getNicePath($D.config.buildPath, $D.config.buildPath + '/browserconfig.xml')));
     cb();
   });
 
 });
 
-// Generate new images from template images as configured.
-gulp.task('build:generate-images', function (cb) {
+// Generate new images with Jimp.
+gulp.task('build:generate-images', function () {
 
-  generateImages().then(function () {
-    cb();
-  }, function (err) {
-    cb(err);
+  var ret = Promise.resolve();
+  var sets = ($D.config.generateImages || []);
+
+  sets.forEach(function (set) {
+
+    ret = ret.then(function (resolve, reject) {
+
+      var sourcePath = path.normalize($D.config.buildPath + set.source);
+      util.log('>', util.colors.yellow(sourcePath));
+
+      set.sizes.forEach(function (size) {
+
+        var targetPath = path.normalize($D.config.buildPath + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]));
+
+        if (!pathExists(targetPath)) {
+
+          jimp.read(sourcePath, function (err, img) {
+
+            if (err) { reject(err); }
+
+            img
+            .resize(size[0], size[1])
+            .write(targetPath, function (err, val) {
+
+              if (err) { reject(err); }
+
+              util.log('+', util.colors.green(targetPath));
+
+              resolve(val);
+
+            });
+
+          });
+
+        }
+
+      });
+
+
+    });
+
   });
+
+  return ret;
 
 });
 
-// Optimize images as configured.
+// Optimize images with imagemin.
 gulp.task('build:optimize-images', function (cb) {
 
   return gulp
   .src(genSrc($D.config.buildPath, $D.config.optimizeImages.files), {
     base: $D.config.buildPath
   })
+  .pipe(logFiles($D.config.buildPath, 'edit'))
   .pipe(imagemin($D.config.optimizeImages.options))
   .pipe(gulp.dest($D.config.buildPath));
 
@@ -792,8 +828,9 @@ gulp.task('build:revision', function () {
     var junkFiles = [];
     _.forEach(origFilePaths, function (origFilePath, i) {
       if (origFilePath !== newFilePaths[i]) {
-        var formattedPath = '/' + path.relative($D.config.buildPath, origFilePath).split(path.sep).join('/')
+        var formattedPath = '/' + path.relative($D.config.buildPath, origFilePath).split(path.sep).join('/');
         junkFiles.push(formattedPath);
+        util.log('x', util.colors.red(getNicePath($D.config.buildPath || './', origFilePath)));
       }
     });
 
@@ -821,6 +858,7 @@ gulp.task('build:clean', function (cb) {
     base: $D.config.distPath,
     read: false
   })
+  .pipe(logFiles($D.config.distPath, 'remove'))
   .pipe(vinylPaths(del));
 
 });
@@ -850,6 +888,7 @@ gulp.task('post-build:validate-html-run', function () {
   .src(genSrc($D.config.distPath, $D.config.validateHtml.files), {
     base: $D.config.distPath
   })
+  .pipe(logFiles($D.config.distPath, 'edit'))
   .pipe(w3cjs())
   .pipe(w3cjsReporter());
 
@@ -920,13 +959,13 @@ gulp.task('build', function (cb) {
 
 gulp.task('default', function () {
 
-  return (new Drudge()).build();
+  return (new Mylly()).build();
 
 });
 
 gulp.task('server', function () {
 
-  return (new Drudge()).server();
+  return (new Mylly()).server();
 
 });
 
@@ -936,6 +975,6 @@ gulp.task('server', function () {
 
 module.exports = function (opts) {
 
-  return new Drudge(opts);
+  return new Mylly(opts);
 
 };

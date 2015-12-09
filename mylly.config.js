@@ -1,7 +1,7 @@
 // Quick configuration
 // *******************
-// These variables offer an easy way to configure drudge quickly if you are happy with most of the
-// default settings.
+// These variables offer an easy way to configure factotum quickly if you are
+// happy with most of the default settings.
 
 // Define source/build/dist directory paths.
 var srcPath = './src';
@@ -36,7 +36,8 @@ var tplContextId = '.ctx';
 
 // Advanced confiquration
 // **********************
-// Alternatively you can directly modify configuration object for more fine-grained control.
+// Alternatively you can directly modify configuration object for more
+// fine-grained control.
 
 var config = {};
 
@@ -52,26 +53,21 @@ config.buildPath = buildPath;
 // @type {String}
 config.distPath = distPath;
 
-// JavaScript syntax error validation configuration. Set to null to disable.
-// https://www.npmjs.com/package/gulp-jsvalidate
-// @type {Object|Null}
-config.validateJs = {
-  // Define the JavaScript files you want to validate. The paths are relative to srcPath.
-  // @type {Array|String}
-  files: '/**/*.js'
-};
-
-// JavaScript linting configuration. Set to null to disable.
+// JavaScript linting configuration using ESLint. Set to null to disable.
 // @type {Object|Null}
 config.lintJs = {
-  // Define the JavaScript files you want to lint. The paths are relative to srcPath.
+  // Define the JavaScript files you want to lint. The paths are relative to
+  // srcPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
   files: path.scripts + '/*.js',
-  // Path to the .jscsrc configuration file.
-  // http://jscs.info/
-  // @type {String}
-  configPath: srcPath + '/.jscsrc'
+  // ESLint configuration.
+  // https://github.com/adametry/gulp-eslint/blob/master/example/config.js
+  // https://mozilla.github.io/nunjucks/api.html#configure
+  // @type {Object|String}
+  options: {
+    config: srcPath + '/.eslintrc'
+  }
 };
 
 // Sass linting configuration. Set to null to disable.
@@ -306,7 +302,7 @@ config.cleanBefore = [
   '/**/*' + tplId + tplContextId + '.json',
   '/**/*' + tplId + tplContextId + '.js',
   // Clean config files.
-  '/.jscsrc',
+  '/.eslintrc',
   '/sass-lint.yml'
 ];
 
