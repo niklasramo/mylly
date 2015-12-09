@@ -1,40 +1,70 @@
-# factotum
+# mylly
 
-Factotum is an opinionated static site generator for Node.js. This project started out as a gulp boilerplate, but has evolved into a node module. The aim here is to build a module that cn automate everything that can be automated (related to building static web sites) purely with Node. Please note that this module is actively developed and not ready for production yet.
+Mylly (finnish for *mill*) is an opinionated static site generator using specific set of Node modules to automate tedious and repetitive tasks.
+
+##Install
+
+`npm install mylly --save-dev`
 
 ##Features
 
-* [Nunjucks](https://mozilla.github.io/nunjucks/) templates with markdown parsing support.
+* Compiles [Nunjucks](https://mozilla.github.io/nunjucks/) templates.
+* Compiles markdown.
 * Validates HTML files according to W3C standards.
 * Lints and compiles [Sass](http://sass-lang.com/) stylesheets.
 * Removes unused CSS styles.
 * Concatenates, minifies and lints JavaScript files.
-* Generates fav/touch icons.
-* Optimizes images.
+* Resizes images and optimizes images.
 * Generates browserconfig.xml.
 * Generates sitemap.xml.
 * Revisions files.
 * BrowserSync development server.
+* Build report.
 
-##Install
+## Upcoming features
 
-Coming up...
+* Compile ES6/ES7 code to ES5 using Babel.
+* CSS and JS sourcemaps.
+* SEO report.
+* Page speed report.
+* Generate multisize favicon.ico from multiple png files.
+* Offline HTML validation.
 
 ##Usage
 
 ```javascript
-var factotum = require('factotum');
+var mylly = require('mylly');
 
-// Create a factotum instance with path to configuration file.
-// Alternatively you can provide the conffiguration object
-// directly here.
-var prod = factotum('./drudge.prod.js');
+// Create a mylly instance with path to configuration file.
+var prod = mylly('./mylly.prod.js');
 
 // Optionally create another drudge instance with other configuration.
-var dev = factotum('./drudge.dev.js');
+var dev = mylly('./mylly.dev.js');
 
-// Clones the default source directory and drudge
-// configuration file to your project root.
+// Note that you also pass in a configuration object directly.
+var dev2 = mylly(Object.assign(require('./mylly.prod.js'), {
+  buildPath: './devbuild',
+  dist: './devdist',
+  collectAssets: null,
+  minifyJs: null,
+  minifyHtml: null,
+  cleanCss: null,
+  minifyCss: null,
+  sitemap: null,
+  browserconfig: null,
+  generateImages: null,
+  optimizeimages: null,
+  browsersync: {
+    server: {
+      baseDir: './devdist'
+    },
+    reloadOnRestart: true,
+    injectChanges: false
+  }
+}));
+
+// Clones the default source directory and configuration file to your project
+// root.
 prod.init();
 
 // Build the dist directory.
@@ -42,6 +72,10 @@ prod.build();
 
 // Start up a local development server.
 prod.server();
+
+// You can have multiple instances running simultaneously as long as you
+// configure browsersync to use different ports.
+dev.server();
 ```
 
 ##Configuration

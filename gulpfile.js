@@ -7,46 +7,44 @@ Design goals
 * Gulp based file streaming that allows hooking into the stream.
 * Easy to use and configure with good presets.
 * Fast builds. Use advanced file caching techniques to maximize the build speed.
-* Everything is optional. At minimun configuration Drudge should only clone the
+* Everything is optional. At minimun configuration Mylly should only clone the
   source directory and nothing else.
-
-v0.1.0
-======
-  * [x] Build report -> files and their sizes in the command line.
-  * [x] Caching to improve build speed.
-  * [x] Replace Esprima and JSCS with ESLint.
-  * [x] Scaffolding. Allow easy way to init custom project bases.
-  * [ ] File activity reporting. Log stuff that happens in tasks. And make it
-        optional.
-  * [ ] Create a nice API for the build flow that allows plugging custom
-        functionality between the build steps.
-  * [ ] Make sure Drudge plays nicely with Angular/React projects.
-  * [ ] Easier (more restricted) configuration. Consider leaning towards magic
-        and conventions instead of configuration.
-  * [ ] The default src directory should demonstrate all features.
-  * [ ] Docs and readme.
-  * [ ] Github pages website, naturally built with Drudge ;)
-  * [ ] Unit tests.
 
 v0.2.0
 ======
-  * [] Nunjucks powerups
-    * [] moment.js -> https://www.npmjs.com/package/nunjucks-date-filter
-    * [] i18n -> https://www.npmjs.com/package/nunjucks-i18n
-  * [] CSS/JS sourcemaps.
-  * [] Generate multisize favicon.ico (16+24+32+48).
-  * [] Offline HTML validator.
-  * [] Babel integration (Maybe this is a bad idea, debugging transformed code
-       sounds like a massive PITA).
-  * [] Autoprefixer. Needs a lot of consideration since using it may turn out to
-       be a debug nightmare. There are still some open issues the developer
-       needs to be aware about and CSS hacks might get broken during the
-       post-processing process.
-  * [] Allow user to define the CSS pre/post processor engine:
-       Less/Sass/PostCSS
-  * [] Basic speed report -> Page by page size report (divided into total size
-       per asset type, e.g. scripts, styles, images).
-  * [] Basic SEO report -> Page by page SEO report.
+  * [ ] Advanced caching to improve build speed using gulp-cached and
+        gulp-remember.
+  * [ ] Solid default setup that showcases all features and works as a
+        good project skeleton for static websites.
+  * [ ] Disable all non-used plugin params.
+  * [ ] JSDoc syntax code documentation or some other alternative.
+  * [ ] Easier (more restricted) configuration. Consider leaning towards magic
+        and conventions instead of configuration.
+  * [ ] Docs and readme.
+  * [ ] Github pages website, naturally built with Mylly ;)
+  * [ ] Unit tests.
+
+v0.3.0
+======
+  * [ ] Nunjucks powerups
+    * [ ] moment.js -> https://www.npmjs.com/package/nunjucks-date-filter
+    * [ ] i18n -> https://www.npmjs.com/package/nunjucks-i18n
+  * [ ] Create a nice API for the build flow that allows plugging custom
+        functionality between the build steps.
+  * [ ] CSS/JS sourcemaps.
+  * [ ] Generate multisize favicon.ico (16+24+32+48).
+  * [ ] Offline HTML validator.
+  * [ ] Babel integration (Maybe this is a bad idea, debugging transformed code
+        sounds like a massive PITA).
+  * [ ] Autoprefixer. Needs a lot of consideration since using it may turn out
+        to be a debug nightmare. There are still some open issues the developer
+        needs to be aware about and CSS hacks might get broken during the
+        post-processing process.
+  * [ ] Allow user to define the CSS pre/post processor engine:
+        Less/Sass/PostCSS
+  * [ ] Basic speed report -> Page by page size report (divided into total size
+        per asset type, e.g. scripts, styles, images).
+  * [ ] Basic SEO report -> Page by page SEO report.
 
 */
 
@@ -70,27 +68,24 @@ var through2 = require('through2');
 var js2xmlparser = require("js2xmlparser");
 var vinylPaths = require('vinyl-paths');
 var isOnline = require('is-online');
-var lazypipe = require('lazypipe');
 var filesize = require('filesize');
 var gulp = require('gulp');
-var util = require('gulp-util');
-var sass = require('gulp-sass');
-var sassLint = require('gulp-sass-lint');
-var uglify = require('gulp-uglify');
-var useref = require('gulp-useref');
-var gulpif = require('gulp-if');
-var sequence = require('gulp-sequence');
-var foreach = require('gulp-foreach');
-var revAll = require('gulp-rev-all');
-var change = require('gulp-change');
-var w3cjs = require('gulp-w3cjs');
-var imagemin = require('gulp-imagemin');
-var sitemap = require('gulp-sitemap');
-var uncss = require('gulp-uncss');
-var cache = require('gulp-cached');
-var rename = require('gulp-rename');
-var cssnano = require('gulp-cssnano');
-var eslint = require('gulp-eslint');
+var gulpUtil = require('gulp-util');
+var gulpSass = require('gulp-sass');
+var gulpSassLint = require('gulp-sass-lint');
+var gulpUglify = require('gulp-uglify');
+var gulpUseref = require('gulp-useref');
+var gulpSequence = require('gulp-sequence');
+var gulpForeach = require('gulp-foreach');
+var gulpRevAll = require('gulp-rev-all');
+var gulpChange = require('gulp-change');
+var gulpW3cjs = require('gulp-w3cjs');
+var gulpImagemin = require('gulp-imagemin');
+var gulpSitemap = require('gulp-sitemap');
+var gulpUncss = require('gulp-uncss');
+var gulpCache = require('gulp-cached');
+var gulpCssnano = require('gulp-cssnano');
+var gulpEslint = require('gulp-eslint');
 
 //
 // Local variables
@@ -119,7 +114,7 @@ var taskQueue = [
   ['build:revision', 'revision'],
   ['build:clean'],
   ['post-build:validate-html', 'validateHtml'],
-  ['post-build:report', 'report']
+  ['post-build:report', 'buildReport']
 ];
 
 var allowedConfigTypes = {
@@ -136,8 +131,7 @@ var allowedConfigTypes = {
   }],
   templates: ['object|null', {
     files: ['array|string'],
-    id: ['string'],
-    contextId: ['string'],
+    context: ['string'],
     data: ['object|null'],
     markdown: ['object|null'],
     options: ['object']
@@ -189,7 +183,8 @@ var allowedConfigTypes = {
     files: ['array|string'],
     options: ['object']
   }],
-  report: ['boolean'],
+  taskReport: ['boolean'],
+  buildReport: ['boolean'],
   cleanBefore: ['array|string'],
   cleanAfter: ['array|string'],
   browsersync: ['object']
@@ -205,10 +200,10 @@ var configPath = '/mylly.config.js';
 var baseCfg = getFileData(projectRoot + configPath);
 
 // Build queue.
-var $Q = Promise.resolve();
+var buildQueue = Promise.resolve();
 
 // Currently active Mylly instance.
-var $D;
+var M;
 
 // Mylly instance id
 var MyllyId = 0;
@@ -236,8 +231,8 @@ function Mylly(opts) {
   // Create Nunjucks instance.
   inst.nunjucks = nunjucks.configure(inst.config.srcPath, inst.config.templates ? inst.config.templates.options : {});
 
-  // Create revAll instance.
-  inst.revAll = new revAll(inst.config.revision ? inst.config.revision.options : {});
+  // Create gulpRevAll instance.
+  inst.rev = new gulpRevAll(inst.config.revision ? inst.config.revision.options : {});
 
   // Build task queue.
   inst.tasks = _.chain(taskQueue.slice(0))
@@ -260,12 +255,12 @@ Mylly.prototype._setup = function () {
   return new Promise(function (res) {
 
     // Clear file cache if build instance is changed.
-    if ($D !== inst) {
-      cache.caches = {};
+    if (M !== inst) {
+      gulpCache.caches = {};
     }
 
     // Setup build instance.
-    $D = inst;
+    M = inst;
 
     // Setup marked.
     if (inst.config.templates && inst.config.templates.markdown) {
@@ -303,12 +298,12 @@ Mylly.prototype.build = function () {
 
   var inst = this;
 
-  return $Q = $Q.then(function () {
+  return buildQueue = buildQueue.then(function () {
     return inst._setup();
   })
   .then(function () {
     return new Promise(function (resolve, reject) {
-      sequence('build')(function (err) {
+      gulpSequence('build')(function (err) {
         if (err) reject(err);
         resolve(inst);
       });
@@ -370,8 +365,7 @@ function validateOptionBranch(treeBranch, optsBranch) {
     nestedRules = val[1];
 
     if (!typeCheck(optionValue, allowedValues)) {
-      console.log(key);
-      throw new TypeError('Configuration object has bad data.');
+      throw new TypeError('Configuration object error: cfg.' + key + ' type should be ' + allowedValues.split('|', ' or ').join() + ', but it is ' + typeOf(optionValue));
     }
 
     if (optionValue && typeOf(nestedRules, 'object')) {
@@ -455,29 +449,11 @@ function getFileData(filePath) {
 
 function getTemplateData(file) {
 
-  // Get template core data.
-  var tplCoreData = $D.config.templates.data;
+  // Get the template context file path and data.
+  var tplCtxPath = path.normalize(file.path).replace(/\.[^/.]+$/, M.config.templates.context);
+  var tplCtxData = getFileData(tplCtxPath);
 
-  // Get JSON context file.
-  var tplJsonData = path.parse(file.path);
-  tplJsonData.name = tplJsonData.name + $D.config.templates.contextId;
-  tplJsonData.ext = '.json';
-  tplJsonData.base = tplJsonData.name + tplJsonData.ext;
-  tplJsonData = getFileData(path.format(tplJsonData));
-
-  // Get JS context file.
-  var tplJsData = path.parse(file.path);
-  tplJsData.name = tplJsData.name + $D.config.templates.contextId;
-  tplJsData.ext = '.js';
-  tplJsData.base = tplJsData.name + tplJsData.ext;
-  tplJsData = getFileData(path.format(tplJsData));
-
-  // Provide JSON data as context for JS data function (if it exists).
-  if (_.isFunction(tplJsData)) {
-    tplJsData = tplJsData(tplCoreData, tplJsonData);
-  }
-
-  return _.assign({}, tplCoreData, tplJsonData, tplJsData);
+  return _.isFunction(tplCtxData) ? tplCtxData(_.assign({}, M.config.templates.data)) : _.assign({}, M.config.templates.data, tplCtxData);
 
 }
 
@@ -485,22 +461,22 @@ function nunjucksRender(content) {
 
   var file = this.file;
   var data = getTemplateData(file);
-  return $D.nunjucks.render(path.relative($D.config.srcPath, file.path), data);
+  return M.nunjucks.render(path.relative(M.config.srcPath, file.path), data);
 
 }
 
 function minifyHtml(content) {
 
-  return htmlMinifier(content, $D.config.minifyHtml.options);
+  return htmlMinifier(content, M.config.minifyHtml.options);
 
 }
 
-function w3cjsReporter() {
+function gulpW3cjsReporter() {
 
   return through2.obj(function (file, enc, cb) {
     cb(null, file);
     if (file.w3cjs && !file.w3cjs.success) {
-      util.log('HTML validation error(s) found');
+      gulpUtil.log('HTML validation error(s) found');
     }
   });
 
@@ -508,7 +484,7 @@ function w3cjsReporter() {
 
 function logSkipTask(taskName, reason) {
 
-  util.log(util.colors.yellow("Skipping"), "'" + util.colors.cyan(taskName) + "'", util.colors.red(reason));
+  gulpUtil.log(gulpUtil.colors.yellow("Skipping"), "'" + gulpUtil.colors.cyan(taskName) + "'", gulpUtil.colors.red(reason));
 
 }
 
@@ -518,9 +494,14 @@ function getNicePath(from, to) {
 
 }
 
-function logFiles(rootPath, action, fileTypes) {
+function fLog(filePath, action) {
 
-  var msg, color;
+  if (!M.config.taskReport) {
+    return;
+  }
+
+  var msg;
+  var color;
 
   if (action === 'edit') {
     msg = '>';
@@ -537,11 +518,19 @@ function logFiles(rootPath, action, fileTypes) {
     color = 'green';
   }
 
+  gulpUtil.log(msg, gulpUtil.colors[color](filePath));
+
+}
+
+function logFiles(rootPath, action, fileTypes) {
+
   return through2.obj(function (file, enc, cb) {
-    var fileType = fileTypes ? path.extname(file.path) : false;
-    var isCorrectFileType = fileTypes ? fileType && fileTypes.indexOf(fileType) > -1 : true;
-    if (file.stat && file.stat.isFile() && isCorrectFileType) {
-      util.log(msg, util.colors[color](getNicePath(rootPath || './', file.path)));
+    if (M.config.taskReport) {
+      var fileType = fileTypes ? path.extname(file.path) : false;
+      var isCorrectFileType = fileTypes ? fileType && fileTypes.indexOf(fileType) > -1 : true;
+      if (file.stat && file.stat.isFile() && isCorrectFileType) {
+        fLog(getNicePath(rootPath || './', file.path), action)
+      }
     }
     cb(null, file);
   });
@@ -556,14 +545,14 @@ function logFiles(rootPath, action, fileTypes) {
 gulp.task('pre-build:lint-js', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.srcPath, $D.config.lintJs.files), {
-    base: $D.config.srcPath
+  .src(genSrc(M.config.srcPath, M.config.lintJs.files), {
+    base: M.config.srcPath
   })
-  .pipe(cache($D.id + '-lint-js'))
-  .pipe(eslint($D.config.lintJs.options))
-  .pipe(eslint.format())
-  .pipe(eslint.failAfterError())
-  .pipe(logFiles($D.config.srcPath, 'edit'));
+  .pipe(gulpCache(M.id + '-lint-js'))
+  .pipe(logFiles(M.config.srcPath, 'edit'))
+  .pipe(gulpEslint(M.config.lintJs.options))
+  .pipe(gulpEslint.format())
+  .pipe(gulpEslint.failAfterError());
 
 });
 
@@ -571,14 +560,14 @@ gulp.task('pre-build:lint-js', function (cb) {
 gulp.task('pre-build:lint-sass', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.srcPath, $D.config.lintSass.files), {
-    base: $D.config.srcPath
+  .src(genSrc(M.config.srcPath, M.config.lintSass.files), {
+    base: M.config.srcPath
   })
-  .pipe(cache($D.id + '-lint-sass'))
-  .pipe(sassLint(yamljs.load($D.config.lintSass.configPath)))
-  .pipe(sassLint.format())
-  .pipe(sassLint.failOnError())
-  .pipe(logFiles($D.config.srcPath, 'edit'));
+  .pipe(gulpCache(M.id + '-lint-sass'))
+  .pipe(logFiles(M.config.srcPath, 'edit'))
+  .pipe(gulpSassLint(yamljs.load(M.config.lintSass.configPath)))
+  .pipe(gulpSassLint.format())
+  .pipe(gulpSassLint.failOnError());
 
 });
 
@@ -587,33 +576,30 @@ gulp.task('pre-build:lint-sass', function (cb) {
 // 3. Remove "cleanBefore" files/directories.
 gulp.task('build:setup', function () {
 
-  fs.removeSync($D.config.buildPath);
-  fs.copySync($D.config.srcPath, $D.config.buildPath);
+  fs.removeSync(M.config.buildPath);
+  fs.copySync(M.config.srcPath, M.config.buildPath);
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.cleanBefore), {
-    base: $D.config.buildPath,
+  .src(genSrc(M.config.buildPath, M.config.cleanBefore), {
+    base: M.config.buildPath,
     read: false
   })
-  .pipe(logFiles($D.config.buildPath, 'edit'))
+  .pipe(logFiles(M.config.buildPath, 'remove'))
   .pipe(vinylPaths(del));
 
 });
 
-// Compile Nunjucks templates. (use srcPath and cache the output templates also)
+// Compile Nunjucks templates.
 gulp.task('build:templates', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.srcPath, $D.config.templates.files), {
-    base: $D.config.srcPath
+  .src(genSrc(M.config.srcPath, M.config.templates.files), {
+    base: M.config.srcPath
   })
-  .pipe(logFiles($D.config.srcPath, 'edit'))
-  .pipe(change(nunjucksRender))
-  .pipe(rename(function (path) {
-    path.basename = path.basename.replace($D.config.templates.id, '');
-  }))
-  .pipe(gulp.dest($D.config.buildPath))
-  .pipe(logFiles($D.config.buildPath, 'create'));
+  .pipe(logFiles(M.config.srcPath, 'edit'))
+  .pipe(gulpChange(nunjucksRender))
+  .pipe(gulp.dest(M.config.buildPath))
+  .pipe(logFiles(M.config.buildPath, 'create'));
 
 });
 
@@ -621,31 +607,32 @@ gulp.task('build:templates', function (cb) {
 gulp.task('build:sass', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.srcPath, $D.config.sass.files), {
-    base: $D.config.srcPath
+  .src(genSrc(M.config.srcPath, M.config.sass.files), {
+    base: M.config.srcPath
   })
-  .pipe(logFiles($D.config.srcPath, 'edit'))
-  .pipe(foreach(function (stream, file) {
-    var sassOpts = $D.config.sass.options;
-    sassOpts.outFile = util.replaceExtension(path.basename(file.path), 'css');
-    return stream.pipe(sass(sassOpts));
+  .pipe(logFiles(M.config.srcPath, 'edit'))
+  .pipe(gulpForeach(function (stream, file) {
+    var sassOpts = M.config.sass.options;
+    sassOpts.outFile = gulpUtil.replaceExtension(path.basename(file.path), 'css');
+    return stream.pipe(gulpSass(sassOpts));
   }))
-  .pipe(gulp.dest($D.config.buildPath))
-  .pipe(logFiles($D.config.buildPath, 'create'));
+  .pipe(gulp.dest(M.config.buildPath))
+  .pipe(logFiles(M.config.buildPath, 'create'));
 
 });
 
-// Generate concatenated scripts and styles from useref markers in HTML files within the distribution folder.
+// Generate concatenated scripts and styles from useref markers in HTML files
+// within the distribution folder.
 gulp.task('build:collect-assets', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.collectAssets.files), {
-    base: $D.config.buildPath
+  .src(genSrc(M.config.buildPath, M.config.collectAssets.files), {
+    base: M.config.buildPath
   })
-  .pipe(logFiles($D.config.buildPath, 'edit'))
-  .pipe(useref())
-  .pipe(logFiles($D.config.buildPath, 'create', ['.js', '.css']))
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(logFiles(M.config.buildPath, 'edit'))
+  .pipe(gulpUseref())
+  .pipe(logFiles(M.config.buildPath, 'create', ['.js', '.css']))
+  .pipe(gulp.dest(M.config.buildPath));
 
 });
 
@@ -653,12 +640,12 @@ gulp.task('build:collect-assets', function (cb) {
 gulp.task('build:minify-js', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.minifyJs.files), {
-    base: $D.config.buildPath
+  .src(genSrc(M.config.buildPath, M.config.minifyJs.files), {
+    base: M.config.buildPath
   })
-  .pipe(logFiles($D.config.buildPath, 'edit'))
-  .pipe(uglify($D.config.minifyJs.options))
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(logFiles(M.config.buildPath, 'edit'))
+  .pipe(gulpUglify(M.config.minifyJs.options))
+  .pipe(gulp.dest(M.config.buildPath));
 
 });
 
@@ -666,12 +653,12 @@ gulp.task('build:minify-js', function (cb) {
 gulp.task('build:minify-html', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.minifyHtml.files), {
-    base: $D.config.buildPath
+  .src(genSrc(M.config.buildPath, M.config.minifyHtml.files), {
+    base: M.config.buildPath
   })
-  .pipe(logFiles($D.config.buildPath, 'edit'))
-  .pipe(change(minifyHtml))
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(logFiles(M.config.buildPath, 'edit'))
+  .pipe(gulpChange(minifyHtml))
+  .pipe(gulp.dest(M.config.buildPath));
 
 });
 
@@ -679,12 +666,12 @@ gulp.task('build:minify-html', function (cb) {
 gulp.task('build:clean-css', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.cleanCss.files), {
-    base: $D.config.buildPath
+  .src(genSrc(M.config.buildPath, M.config.cleanCss.files), {
+    base: M.config.buildPath
   })
-  .pipe(logFiles($D.config.buildPath, 'edit'))
-  .pipe(uncss($D.config.cleanCss.options))
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(logFiles(M.config.buildPath, 'edit'))
+  .pipe(gulpUncss(M.config.cleanCss.options))
+  .pipe(gulp.dest(M.config.buildPath));
 
 });
 
@@ -692,12 +679,12 @@ gulp.task('build:clean-css', function (cb) {
 gulp.task('build:minify-css', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.minifyCss.files), {
-    base: $D.config.buildPath
+  .src(genSrc(M.config.buildPath, M.config.minifyCss.files), {
+    base: M.config.buildPath
   })
-  .pipe(logFiles($D.config.buildPath, 'edit'))
-  .pipe(cssnano())
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(logFiles(M.config.buildPath, 'edit'))
+  .pipe(gulpCssnano())
+  .pipe(gulp.dest(M.config.buildPath));
 
 });
 
@@ -705,14 +692,14 @@ gulp.task('build:minify-css', function (cb) {
 gulp.task('build:sitemap', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.sitemap.files), {
-    base: $D.config.buildPath
+  .src(genSrc(M.config.buildPath, M.config.sitemap.files), {
+    base: M.config.buildPath
   })
-  .pipe(logFiles($D.config.buildPath, 'edit'))
-  .pipe(sitemap($D.config.sitemap.options))
-  .pipe(gulp.dest($D.config.buildPath))
+  .pipe(logFiles(M.config.buildPath, 'edit'))
+  .pipe(gulpSitemap(M.config.sitemap.options))
+  .pipe(gulp.dest(M.config.buildPath))
   .on('end', function () {
-    util.log('+', util.colors.green(getNicePath($D.config.buildPath, $D.config.buildPath + '/sitemap.xml')));
+    fLog(getNicePath(M.config.buildPath, M.config.buildPath + '/sitemap.xml'), 'create');
   });
 
 });
@@ -723,18 +710,18 @@ gulp.task('build:browserconfig', function (cb) {
   var data = js2xmlparser('browserconfig', {
     'msapplication': {
       'tile': {
-        'square70x70logo': {'@': {'src': $D.config.browserconfig.tile70x70}},
-        'square150x150logo': {'@': {'src': $D.config.browserconfig.tile150x150}},
-        'square310x150logo': {'@': {'src': $D.config.browserconfig.tile310x150}},
-        'square310x310logo': {'@': {'src': $D.config.browserconfig.tile310x310}},
-        'TileColor': $D.config.browserconfig.tileColor
+        'square70x70logo': {'@': {'src': M.config.browserconfig.tile70x70}},
+        'square150x150logo': {'@': {'src': M.config.browserconfig.tile150x150}},
+        'square310x150logo': {'@': {'src': M.config.browserconfig.tile310x150}},
+        'square310x310logo': {'@': {'src': M.config.browserconfig.tile310x310}},
+        'TileColor': M.config.browserconfig.tileColor
       }
     }
   });
 
-  fs.writeFile($D.config.buildPath + '/browserconfig.xml', data, function (err) {
+  fs.writeFile(M.config.buildPath + '/browserconfig.xml', data, function (err) {
     if (err) cb(err);
-    util.log('+', util.colors.green(getNicePath($D.config.buildPath, $D.config.buildPath + '/browserconfig.xml')));
+    fLog(getNicePath(M.config.buildPath, M.config.buildPath + '/browserconfig.xml'), 'create');
     cb();
   });
 
@@ -744,43 +731,43 @@ gulp.task('build:browserconfig', function (cb) {
 gulp.task('build:generate-images', function () {
 
   var ret = Promise.resolve();
-  var sets = ($D.config.generateImages || []);
+  var sets = (M.config.generateImages || []);
 
   sets.forEach(function (set) {
 
-    ret = ret.then(function (resolve, reject) {
+    ret = ret.then(function () {
 
-      var sourcePath = path.normalize($D.config.buildPath + set.source);
-      util.log('>', util.colors.yellow(sourcePath));
+      return new Promise(function (resolve, reject) {
 
-      set.sizes.forEach(function (size) {
+        var sourcePath = path.normalize(M.config.buildPath + set.source);
+        fLog(sourcePath, 'edit');
 
-        var targetPath = path.normalize($D.config.buildPath + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]));
+        set.sizes.forEach(function (size) {
 
-        if (!pathExists(targetPath)) {
+          var targetPath = path.normalize(M.config.buildPath + set.target.replace('{{ width }}', size[0]).replace('{{ height }}', size[1]));
 
-          jimp.read(sourcePath, function (err, img) {
+          if (!pathExists(targetPath)) {
 
-            if (err) { reject(err); }
-
-            img
-            .resize(size[0], size[1])
-            .write(targetPath, function (err, val) {
+            jimp.read(sourcePath, function (err, img) {
 
               if (err) { reject(err); }
 
-              util.log('+', util.colors.green(targetPath));
-
-              resolve(val);
+              img
+              .resize(size[0], size[1])
+              .write(targetPath, function (err, val) {
+                if (err) { reject(err); }
+                fLog(targetPath, 'create');
+                resolve(val);
+              });
 
             });
 
-          });
+          }
 
-        }
+        });
+
 
       });
-
 
     });
 
@@ -794,12 +781,12 @@ gulp.task('build:generate-images', function () {
 gulp.task('build:optimize-images', function (cb) {
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.optimizeImages.files), {
-    base: $D.config.buildPath
+  .src(genSrc(M.config.buildPath, M.config.optimizeImages.files), {
+    base: M.config.buildPath
   })
-  .pipe(logFiles($D.config.buildPath, 'edit'))
-  .pipe(imagemin($D.config.optimizeImages.options))
-  .pipe(gulp.dest($D.config.buildPath));
+  .pipe(logFiles(M.config.buildPath, 'edit'))
+  .pipe(gulpImagemin(M.config.optimizeImages.options))
+  .pipe(gulp.dest(M.config.buildPath));
 
 });
 
@@ -810,31 +797,37 @@ gulp.task('build:revision', function () {
   var newFilePaths = [];
 
   return gulp
-  .src(genSrc($D.config.buildPath, $D.config.revision.files), {
-    base: $D.config.buildPath
+  .src(genSrc(M.config.buildPath, M.config.revision.files), {
+    base: M.config.buildPath
   })
-  .pipe(change(function (content) {
-    origFilePaths.push(this.file.path);
+  .pipe(logFiles(M.config.buildPath, 'edit'))
+  .pipe(gulpChange(function (content) {
+    var filePath = path.normalize(this.file.path);
+    origFilePaths.push(filePath);
     return content;
   }))
-  .pipe($D.revAll.revision())
-  .pipe(change(function (content) {
-    newFilePaths.push(this.file.path);
+  .pipe(M.rev.revision())
+  .pipe(gulpChange(function (content) {
+    var filePath = path.normalize(this.file.path);
+    newFilePaths.push(filePath);
+    if (origFilePaths.indexOf(filePath) === -1) {
+      fLog(getNicePath(M.config.buildPath || './', filePath), 'create');
+    }
     return content;
   }))
-  .pipe(gulp.dest($D.config.buildPath))
+  .pipe(gulp.dest(M.config.buildPath))
   .on('end', function () {
 
     var junkFiles = [];
     _.forEach(origFilePaths, function (origFilePath, i) {
       if (origFilePath !== newFilePaths[i]) {
-        var formattedPath = '/' + path.relative($D.config.buildPath, origFilePath).split(path.sep).join('/');
+        var formattedPath = '/' + path.relative(M.config.buildPath, origFilePath).split(path.sep).join('/');
         junkFiles.push(formattedPath);
-        util.log('x', util.colors.red(getNicePath($D.config.buildPath || './', origFilePath)));
+        fLog(getNicePath(M.config.buildPath || './', origFilePath), 'remove');
       }
     });
 
-    del.sync(genSrc($D.config.buildPath, junkFiles), {force: true});
+    del.sync(genSrc(M.config.buildPath, junkFiles), {force: true});
 
   });
 
@@ -845,20 +838,20 @@ gulp.task('build:revision', function () {
 // 3. Atomize all unwanted files/directories.
 gulp.task('build:clean', function (cb) {
 
-  if (pathExists($D.config.distPath)) {
-    fs.removeSync($D.config.distPath);
+  if (pathExists(M.config.distPath)) {
+    fs.removeSync(M.config.distPath);
   }
 
-  if (pathExists($D.config.buildPath)) {
-    fs.renameSync($D.config.buildPath, $D.config.distPath);
+  if (pathExists(M.config.buildPath)) {
+    fs.renameSync(M.config.buildPath, M.config.distPath);
   }
 
   return gulp
-  .src(genSrc($D.config.distPath, $D.config.cleanAfter), {
-    base: $D.config.distPath,
+  .src(genSrc(M.config.distPath, M.config.cleanAfter), {
+    base: M.config.distPath,
     read: false
   })
-  .pipe(logFiles($D.config.distPath, 'remove'))
+  .pipe(logFiles(M.config.distPath, 'remove'))
   .pipe(vinylPaths(del));
 
 });
@@ -875,7 +868,7 @@ gulp.task('post-build:validate-html', function (cb) {
       cb();
     }
     else {
-      sequence('post-build:validate-html-run')(cb);
+      gulpSequence('post-build:validate-html-run')(cb);
     }
   });
 
@@ -885,12 +878,12 @@ gulp.task('post-build:validate-html', function (cb) {
 gulp.task('post-build:validate-html-run', function () {
 
   return gulp
-  .src(genSrc($D.config.distPath, $D.config.validateHtml.files), {
-    base: $D.config.distPath
+  .src(genSrc(M.config.distPath, M.config.validateHtml.files), {
+    base: M.config.distPath
   })
-  .pipe(logFiles($D.config.distPath, 'edit'))
-  .pipe(w3cjs())
-  .pipe(w3cjsReporter());
+  .pipe(logFiles(M.config.distPath, 'edit'))
+  .pipe(gulpW3cjs())
+  .pipe(gulpW3cjsReporter());
 
 });
 
@@ -903,12 +896,12 @@ gulp.task('post-build:report', function () {
   };
 
   return gulp
-  .src(genSrc($D.config.distPath, '/**/*'), {
-    base: $D.config.distPath
+  .src(genSrc(M.config.distPath, '/**/*'), {
+    base: M.config.distPath
   })
   .pipe(through2.obj(function (file, enc, cb) {
     if (file.stat.isFile()) {
-      var filePath = path.relative($D.config.distPath, file.path);
+      var filePath = path.relative(M.config.distPath, file.path);
       var fileSize = file.stat.size;
       var fileType = path.extname(file.path);
       report.totalSize += fileSize;
@@ -923,12 +916,12 @@ gulp.task('post-build:report', function () {
   }))
   .on('end', function () {
 
-    util.log('');
-    util.log('Build report');
-    util.log(util.colors.gray('------------'));
-    util.log('');
-    util.log('A total of ' + util.colors.cyan(report.totalAmount) + ' files weighing ' + util.colors.magenta(filesize(report.totalSize, {round: 0})) + ' were generated.');
-    util.log('');
+    gulpUtil.log('');
+    gulpUtil.log('Build report');
+    gulpUtil.log(gulpUtil.colors.gray('------------'));
+    gulpUtil.log('');
+    gulpUtil.log('A total of ' + gulpUtil.colors.cyan(report.totalAmount) + ' files weighing ' + gulpUtil.colors.magenta(filesize(report.totalSize, {round: 0})) + ' were generated.');
+    gulpUtil.log('');
 
     _.forEach(report.files, function (fileTypeData, fileType) {
 
@@ -936,15 +929,15 @@ gulp.task('post-build:report', function () {
         return total + val.size;
       }, 0), {round: 0});
 
-      util.log(util.colors.green(fileType), util.colors.cyan(fileTypeData.length), util.colors.magenta(fileTypeSize));
+      gulpUtil.log(gulpUtil.colors.green(fileType), gulpUtil.colors.cyan(fileTypeData.length), gulpUtil.colors.magenta(fileTypeSize));
 
       _.forEach(fileTypeData, function (fileData) {
-        util.log('  ' + fileData.path, util.colors.magenta(filesize(fileData.size, {round: 0})));
+        gulpUtil.log('  ' + fileData.path, gulpUtil.colors.magenta(filesize(fileData.size, {round: 0})));
       });
 
     });
 
-    util.log('');
+    gulpUtil.log('');
 
   });
 
@@ -953,16 +946,18 @@ gulp.task('post-build:report', function () {
 // Build the distribution directory from the source files.
 gulp.task('build', function (cb) {
 
-  sequence.apply(null, $D.tasks)(cb);
+  gulpSequence.apply(null, M.tasks)(cb);
 
 });
 
+// Development test task that creates a new Mylly instance and runs build.
 gulp.task('default', function () {
 
   return (new Mylly()).build();
 
 });
 
+// Development test task that creates a new Mylly instance and runs server.
 gulp.task('server', function () {
 
   return (new Mylly()).server();

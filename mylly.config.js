@@ -30,9 +30,8 @@ var templateData = {
   googleAnalyticsUa: '' // UA-XXXXXX-XX
 };
 
-// Define Nunjucks template and template context identifiers.
-var tplId = '.tpl';
-var tplContextId = '.ctx';
+// Define Nunjucks template context identifier.
+var tplCtxExt = '.ctx.json';
 
 // Advanced confiquration
 // **********************
@@ -85,20 +84,19 @@ config.lintSass = {
 // Templates configuration. Set to null to disable.
 // @type {Object|Null}
 config.templates = {
-  // Define the files you want Nunjucks to process. The paths are relative to srcPath.
+  // Define the files you want Nunjucks to process. The paths are relative to
+  // srcPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
-  files: '/**/[^_]*' + tplId + '.html',
-  // This string is used for identifying template files. The provided string is removed from the
-  // compiled template's basename when processing templates.
+  files: '/**/[^_]*.html',
+  // This string is used for identifying template context files. .json and .js
+  // file formats are supported.
   // @type {String}
-  id: tplId,
-  // This string is used for identifying template context files.
-  // @type {String}
-  contextId: tplContextId,
-  // Core template data which is provided for all templates as context data. Template specific data
-  // (if any) is merged with this data. If the core and template data have identically named
-  // properties the template data is preferred.
+  context: tplCtxExt,
+  // Core template data which is provided for all templates as context data.
+  // Template specific data (if any) is merged with this data. If the core and
+  // template data have identically named properties the template data is
+  // preferred.
   // @type {Object|Null}
   data: templateData,
   // Nunjucks marked configuration. Set to null to disable.
@@ -119,7 +117,7 @@ config.sass = {
   // Define the Sass files you want to compile. The paths are relative to srcPath.
   // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
   // @type {Array|String}
-  files: '/**/*.s+(a|c)ss',
+  files: '/**/[^_]**.s+(a|c)ss',
   // SASS options.
   // https://github.com/sass/node-sass#options
   // @type {Object}
@@ -286,9 +284,13 @@ config.validateHtml = {
   options: {}
 };
 
-// Show build report after a succesful build in the console.
+// Show task reports.
 // @type {Boolean}
-config.report = true;
+config.taskReport = true;
+
+// Show build report.
+// @type {Boolean}
+config.buildReport = true;
 
 // The build process starts with atomizing the distribution directory after which the source
 // directory is cloned as the base for the distribution directory. This settings allows you to
@@ -297,10 +299,9 @@ config.report = true;
 // https://github.com/gulpjs/gulp/blob/master/docs/API.md#gulpsrcglobs-options
 // @type {Array|String|Null}
 config.cleanBefore = [
-  // Clean all template files and their context files.
-  '/**/*' + tplId + '.html',
-  '/**/*' + tplId + tplContextId + '.json',
-  '/**/*' + tplId + tplContextId + '.js',
+  // Clean template files and their context files.
+  '/**/*.html',
+  '/**/*' + tplCtxExt,
   // Clean config files.
   '/.eslintrc',
   '/sass-lint.yml'
