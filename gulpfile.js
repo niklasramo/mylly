@@ -1,50 +1,14 @@
 /*
-
-Design goals
-============
-
-* Tagline: Highly configurable static site/app/blog/whatever generator.
-* Gulp based file streaming that allows hooking into the stream.
-* Easy to use and configure with good presets.
-* Fast builds. Use advanced file caching techniques to maximize the build speed.
-* Everything is optional. At minimun configuration Mylly should only clone the
-  source directory and nothing else.
-
 v0.2.0
 ======
-  * [ ] Advanced caching to improve build speed using gulp-cached and
-        gulp-remember.
-  * [ ] Solid default setup that showcases all features and works as a
-        good project skeleton for static websites.
-  * [ ] Disable all non-used plugin params.
-  * [ ] JSDoc syntax code documentation or some other alternative.
-  * [ ] Easier (more restricted) configuration. Consider leaning towards magic
-        and conventions instead of configuration.
-  * [ ] Docs and readme.
-  * [ ] Github pages website, naturally built with Mylly ;)
-  * [ ] Unit tests.
+  * No config setup - automatically detect what is needed.
+  * Integrate mylly.config.js into gulpfile.js
+  * Handle parallel builds
+  * Minimum number of dependencies.
+  * Docs.
 
-v0.3.0
-======
-  * [ ] Nunjucks powerups
-    * [ ] moment.js -> https://www.npmjs.com/package/nunjucks-date-filter
-    * [ ] i18n -> https://www.npmjs.com/package/nunjucks-i18n
-  * [ ] Create a nice API for the build flow that allows plugging custom
-        functionality between the build steps.
-  * [ ] CSS/JS sourcemaps.
-  * [ ] Generate multisize favicon.ico (16+24+32+48).
-  * [ ] Offline HTML validator.
-  * [ ] Babel integration (Maybe this is a bad idea, debugging transformed code
-        sounds like a massive PITA).
-  * [ ] Autoprefixer. Needs a lot of consideration since using it may turn out
-        to be a debug nightmare. There are still some open issues the developer
-        needs to be aware about and CSS hacks might get broken during the
-        post-processing process.
-  * [ ] Allow user to define the CSS pre/post processor engine:
-        Less/Sass/PostCSS
-  * [ ] Basic speed report -> Page by page size report (divided into total size
-        per asset type, e.g. scripts, styles, images).
-  * [ ] Basic SEO report -> Page by page SEO report.
+  var myllyDev = require('mylly')(true);
+  var myllyProd = require('mylly')(false);
 
 */
 
@@ -61,14 +25,14 @@ var nunjucks = require('nunjucks');
 var nunjucksMarkdown = require('nunjucks-markdown');
 var marked = require('marked');
 var jimp = require('jimp');
-var appRoot = require('app-root-path');
-var browserSync = require('browser-sync');
 var yamljs = require('yamljs');
 var through2 = require('through2');
-var js2xmlparser = require("js2xmlparser");
 var vinylPaths = require('vinyl-paths');
 var isOnline = require('is-online');
 var filesize = require('filesize');
+var notifier = require('node-notifier');
+var deleteEmpty = require('delete-empty');
+var browserSync = require('browser-sync');
 var gulp = require('gulp');
 var gulpUtil = require('gulp-util');
 var gulpSass = require('gulp-sass');
@@ -97,8 +61,8 @@ var gulpEslint = require('gulp-eslint');
 // Mylly configuration object as truthy value in order for the task to be
 // included in the Mylly instance's build tasks.
 var taskQueue = [
-  ['pre-build:lint-js', 'lintJs'],
-  ['pre-build:lint-sass', 'lintSass'],
+  ['lint:js', 'lintJs'],
+  ['lint:sass', 'lintSass'],
   ['build:setup'],
   ['build:templates', 'templates'],
   ['build:sass', 'sass'],
@@ -108,131 +72,45 @@ var taskQueue = [
   ['build:clean-css', 'cleanCss'],
   ['build:minify-css', 'minifyCss'],
   ['build:sitemap', 'sitemap'],
-  ['build:browserconfig', 'browserconfig'],
   ['build:generate-images', 'generateImages'],
   ['build:optimize-images', 'optimizeImages'],
   ['build:revision', 'revision'],
   ['build:clean'],
-  ['post-build:validate-html', 'validateHtml'],
-  ['post-build:report', 'buildReport']
+  ['aftermath:validate-html', 'validateHtml'],
+  ['aftermath:report', 'buildReport']
 ];
 
-var allowedConfigTypes = {
-  srcPath: ['string'],
-  buildPath: ['string'],
-  distPath: ['string'],
-  lintJs: ['object|null', {
-    files: ['array|string'],
-    options: ['object|string']
-  }],
-  lintSass: ['object|null', {
-    files: ['array|string'],
-    configPath: ['string']
-  }],
-  templates: ['object|null', {
-    files: ['array|string'],
-    context: ['string'],
-    data: ['object|null'],
-    markdown: ['object|null'],
-    options: ['object']
-  }],
-  sass: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  collectAssets: ['object|null', {
-    files: ['array|string']
-  }],
-  minifyJs: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  minifyHtml: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  cleanCss: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  minifyCss: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  sitemap: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  browserconfig: ['object|null', {
-    tile70x70: ['string'],
-    tile150x150: ['string'],
-    tile310x150: ['string'],
-    tile310x310: ['string'],
-    tileColor: ['string']
-  }],
-  generateImages: ['array|null'],
-  optimizeImages: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  revision: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  validateHtml: ['object|null', {
-    files: ['array|string'],
-    options: ['object']
-  }],
-  taskReport: ['boolean'],
-  buildReport: ['boolean'],
-  cleanBefore: ['array|string'],
-  cleanAfter: ['array|string'],
-  browsersync: ['object']
-};
-
-// Get project root path.
-var projectRoot = __dirname;
-
-// Mylly configuration file path (relative).
-var configPath = '/mylly.config.js';
-
-// Get mylly base configuration.
-var baseCfg = getFileData(projectRoot + configPath);
-
-// Build queue.
-var buildQueue = Promise.resolve();
-
-// Currently active Mylly instance.
+// Currently active Mylly instance and related promise.
 var M;
-
-// Mylly instance id
-var MyllyId = 0;
 
 //
 // Mylly constructor
 //
 
-function Mylly(opts) {
+function Mylly(isDev, rootPath) {
 
   var inst = this;
 
-  // Generate id for the instance.
-  inst.id = ++MyllyId;
+  // Sanitize rootpath.
+  rootPath = typeof rootPath === 'string' ? rootPath : '.';
 
-  // Sanitize options.
-  opts = _.isPlainObject(opts) ? opts : _.isString(opts) ? getFileData(opts) : {};
+  // Store root path.
+  inst.rootPath = rootPath;
 
   // Store configuration to instance.
-  inst.config = sanitizeOptions(_.assign({}, baseCfg, opts));
-
-  // Create Browsersync instance.
-  inst.browsersync = browserSync.create();
+  inst.config = _.assign({}, getFileData(__dirname + '/mylly.config.js')(isDev, rootPath));
 
   // Create Nunjucks instance.
   inst.nunjucks = nunjucks.configure(inst.config.srcPath, inst.config.templates ? inst.config.templates.options : {});
 
   // Create gulpRevAll instance.
   inst.rev = new gulpRevAll(inst.config.revision ? inst.config.revision.options : {});
+
+  // Create browserSync instance.
+  inst.browsersync = browserSync.create();
+
+  // Build error indicator.
+  inst.buildError = undefined;
 
   // Build task queue.
   inst.tasks = _.chain(taskQueue.slice(0))
@@ -248,11 +126,17 @@ function Mylly(opts) {
 
 }
 
-Mylly.prototype._setup = function () {
+Mylly.prototype.build = function () {
 
   var inst = this;
 
-  return new Promise(function (res) {
+  // Let's notify that build started.
+  notify('Build started');
+
+  // Reset build error.
+  inst.buildError = undefined;
+
+  return new Promise(function (resolve, reject) {
 
     // Clear file cache if build instance is changed.
     if (M !== inst) {
@@ -262,62 +146,43 @@ Mylly.prototype._setup = function () {
     // Setup build instance.
     M = inst;
 
-    // Setup marked.
+    // Setup nunjucks.
     if (inst.config.templates && inst.config.templates.markdown) {
       marked.setOptions(inst.config.templates.markdown);
       nunjucksMarkdown.register(inst.nunjucks, marked);
     }
 
-    res(inst);
-
-  });
-
-};
-
-Mylly.prototype.init = function () {
-
-  var inst = this;
-
-  return new Promise(function (resolve) {
-
-    if (!pathExists(inst.config.srcPath)) {
-      fs.copySync(projectRoot + '/src', inst.config.buildPath);
-    }
-
-    if (!pathExists(appRoot + configPath)) {
-      fs.copySync(projectRoot + configPath, appRoot + configPath);
-    }
-
-    resolve(inst);
-
-  });
-
-};
-
-Mylly.prototype.build = function () {
-
-  var inst = this;
-
-  return buildQueue = buildQueue.then(function () {
-    return inst._setup();
-  })
-  .then(function () {
-    return new Promise(function (resolve, reject) {
-      gulpSequence('build')(function (err) {
-        if (err) reject(err);
+    // Run build.
+    gulpSequence('build')(function () {
+      if (inst.buildError) {
+        reject(inst.buildError);
+      }
+      else {
         resolve(inst);
-      });
+      }
     });
+
+  })
+  .then(function (val) {
+
+    // Nice, build finished without a hitch.
+    notify('Build completed');
+    return val;
+
   })
   .catch(function (err) {
 
-    // Let's atomize the temporary distribution directory
-    // if a build fails.
+    // Darn, build failed. Let's make some noise.
+    notify('Build failed');
+    gulpUtil.log(err);
+
+    // And reset the build error, for good measure.
+    inst.buildError = undefined;
+
+    // Also, let's delete the temporary build folder.
     if (pathExists(inst.config.buildPath)) {
       fs.removeSync(inst.config.buildPath);
     }
-
-    return inst;
 
   });
 
@@ -327,16 +192,35 @@ Mylly.prototype.server = function () {
 
   var inst = this;
 
-  return inst.build().then(function () {
+  return inst
+  .build()
+  .then(function () {
     return new Promise(function (resolve) {
-      inst.browsersync.init(inst.config.browsersync);
-      gulp.watch(inst.config.srcPath + '/**/*', function () {
-        inst.build().then(function () {
-          inst.browsersync.reload();
-        });
+      inst.browsersync.init(inst.config.browsersync, function () {
+        notify('Server started');
+        resolve(inst);
       });
+    });
+  })
+  .then(function () {
+    return new Promise(function (resolve) {
+      var isBuilding = false;
+      gulp.watch(inst.config.srcPath + '/**/*', function () {
+        if (!isBuilding) {
+          isBuilding = true;
+          inst.build().then(function () {
+            isBuilding = false;
+            inst.browsersync.reload();
+          });
+        }
+      });
+      notify('Started watching files');
       resolve(inst);
     });
+  })
+  .catch(function (err) {
+    notify('Server failed');
+    gulpUtil.log(err);
   });
 
 };
@@ -344,64 +228,6 @@ Mylly.prototype.server = function () {
 //
 // Custom helpers
 //
-
-function sanitizeOptions(opts) {
-
-  opts = _.assign({}, _.isPlainObject(opts) ? opts : {});
-
-  validateOptionBranch(allowedConfigTypes, opts);
-
-  return opts;
-
-}
-
-function validateOptionBranch(treeBranch, optsBranch) {
-
-  _.forEach(treeBranch, function (val, key) {
-
-    var
-    optionValue = optsBranch[key],
-    allowedValues = val[0],
-    nestedRules = val[1];
-
-    if (!typeCheck(optionValue, allowedValues)) {
-      throw new TypeError('Configuration object error: cfg.' + key + ' type should be ' + allowedValues.split('|', ' or ').join() + ', but it is ' + typeOf(optionValue));
-    }
-
-    if (optionValue && typeOf(nestedRules, 'object')) {
-      validateOptionBranch(nestedRules, optionValue);
-    }
-
-  });
-
-}
-
-function typeOf(value, isType) {
-
-  var
-  type = typeof value;
-
-  type = type !== 'object' ? type : ({}).toString.call(value).split(' ')[1].replace(']', '').toLowerCase();
-
-  return isType ? type === isType : type;
-
-}
-
-function typeCheck(value, types) {
-
-  var
-  ok = false,
-  typesArray = types.split('|');
-
-  _.forEach(typesArray, function (type) {
-
-    ok = !ok ? typeOf(value, type) : ok;
-
-  });
-
-  return ok;
-
-}
 
 function pathExists(filePath) {
 
@@ -441,9 +267,16 @@ function genSrc(root, src) {
 
 }
 
+function forceRequire(filePath) {
+
+  delete require.cache[path.resolve(filePath)];
+  return require(filePath);
+
+}
+
 function getFileData(filePath) {
 
-  return pathExists(filePath) ? require(filePath) : {};
+  return pathExists(filePath) ? forceRequire(filePath) : {};
 
 }
 
@@ -529,11 +362,29 @@ function logFiles(rootPath, action, fileTypes) {
       var fileType = fileTypes ? path.extname(file.path) : false;
       var isCorrectFileType = fileTypes ? fileType && fileTypes.indexOf(fileType) > -1 : true;
       if (file.stat && file.stat.isFile() && isCorrectFileType) {
-        fLog(getNicePath(rootPath || './', file.path), action)
+        fLog(getNicePath(rootPath, file.path), action)
       }
     }
     cb(null, file);
   });
+
+}
+
+function notify(msg) {
+
+  notifier.notify({
+    title: 'Mylly',
+    message: msg,
+    sound: true,
+    wait: false
+  });
+
+}
+
+function handlePipeError(err) {
+
+  gulpUtil.log(gulpUtil.color(err));
+  this.emit('end');
 
 }
 
@@ -542,7 +393,12 @@ function logFiles(rootPath, action, fileTypes) {
 //
 
 // Lint JavaScript files.
-gulp.task('pre-build:lint-js', function (cb) {
+gulp.task('lint:js', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   return gulp
   .src(genSrc(M.config.srcPath, M.config.lintJs.files), {
@@ -551,13 +407,21 @@ gulp.task('pre-build:lint-js', function (cb) {
   .pipe(gulpCache(M.id + '-lint-js'))
   .pipe(logFiles(M.config.srcPath, 'edit'))
   .pipe(gulpEslint(M.config.lintJs.options))
+  .on('error', handlePipeError)
   .pipe(gulpEslint.format())
-  .pipe(gulpEslint.failAfterError());
+  .on('error', handlePipeError)
+  .pipe(gulpEslint.failAfterError())
+  .on('error', handlePipeError);
 
 });
 
 // Lint SASS stylesheets.
-gulp.task('pre-build:lint-sass', function (cb) {
+gulp.task('lint:sass', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   return gulp
   .src(genSrc(M.config.srcPath, M.config.lintSass.files), {
@@ -566,31 +430,51 @@ gulp.task('pre-build:lint-sass', function (cb) {
   .pipe(gulpCache(M.id + '-lint-sass'))
   .pipe(logFiles(M.config.srcPath, 'edit'))
   .pipe(gulpSassLint(yamljs.load(M.config.lintSass.configPath)))
+  .on('error', handlePipeError)
   .pipe(gulpSassLint.format())
-  .pipe(gulpSassLint.failOnError());
+  .on('error', handlePipeError)
+  .pipe(gulpSassLint.failOnError())
+  .on('error', handlePipeError);
 
 });
 
 // 1. Delete distribution and temporary distribution directories.
 // 2. Clone the source directory as the distribution directory.
 // 3. Remove "cleanBefore" files/directories.
-gulp.task('build:setup', function () {
+gulp.task('build:setup', function (cb) {
 
-  fs.removeSync(M.config.buildPath);
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
+  if (pathExists(M.config.buildPath)) {
+    fs.removeSync(M.config.buildPath);
+  }
   fs.copySync(M.config.srcPath, M.config.buildPath);
 
-  return gulp
-  .src(genSrc(M.config.buildPath, M.config.cleanBefore), {
-    base: M.config.buildPath,
-    read: false
-  })
-  .pipe(logFiles(M.config.buildPath, 'remove'))
-  .pipe(vinylPaths(del));
+  if (M.config.cleanBefore) {
+    return gulp
+    .src(genSrc(M.config.buildPath, M.config.cleanBefore), {
+      base: M.config.buildPath,
+      read: false
+    })
+    .pipe(logFiles(M.config.buildPath, 'remove'))
+    .pipe(vinylPaths(del));
+  }
+  else {
+    cb();
+  }
 
 });
 
 // Compile Nunjucks templates.
 gulp.task('build:templates', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   return gulp
   .src(genSrc(M.config.srcPath, M.config.templates.files), {
@@ -598,6 +482,7 @@ gulp.task('build:templates', function (cb) {
   })
   .pipe(logFiles(M.config.srcPath, 'edit'))
   .pipe(gulpChange(nunjucksRender))
+  .on('error', handlePipeError)
   .pipe(gulp.dest(M.config.buildPath))
   .pipe(logFiles(M.config.buildPath, 'create'));
 
@@ -605,6 +490,11 @@ gulp.task('build:templates', function (cb) {
 
 // Compile source directory's Sass stylesheets to distribution directory.
 gulp.task('build:sass', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   return gulp
   .src(genSrc(M.config.srcPath, M.config.sass.files), {
@@ -614,7 +504,7 @@ gulp.task('build:sass', function (cb) {
   .pipe(gulpForeach(function (stream, file) {
     var sassOpts = M.config.sass.options;
     sassOpts.outFile = gulpUtil.replaceExtension(path.basename(file.path), 'css');
-    return stream.pipe(gulpSass(sassOpts));
+    return stream.pipe(gulpSass(sassOpts)).on('error', handlePipeError);
   }))
   .pipe(gulp.dest(M.config.buildPath))
   .pipe(logFiles(M.config.buildPath, 'create'));
@@ -625,12 +515,18 @@ gulp.task('build:sass', function (cb) {
 // within the distribution folder.
 gulp.task('build:collect-assets', function (cb) {
 
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
   return gulp
   .src(genSrc(M.config.buildPath, M.config.collectAssets.files), {
     base: M.config.buildPath
   })
   .pipe(logFiles(M.config.buildPath, 'edit'))
   .pipe(gulpUseref())
+  .on('error', handlePipeError)
   .pipe(logFiles(M.config.buildPath, 'create', ['.js', '.css']))
   .pipe(gulp.dest(M.config.buildPath));
 
@@ -639,12 +535,18 @@ gulp.task('build:collect-assets', function (cb) {
 // Minify all specified scripts in distribution folder.
 gulp.task('build:minify-js', function (cb) {
 
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
   return gulp
   .src(genSrc(M.config.buildPath, M.config.minifyJs.files), {
     base: M.config.buildPath
   })
   .pipe(logFiles(M.config.buildPath, 'edit'))
   .pipe(gulpUglify(M.config.minifyJs.options))
+  .on('error', handlePipeError)
   .pipe(gulp.dest(M.config.buildPath));
 
 });
@@ -652,12 +554,18 @@ gulp.task('build:minify-js', function (cb) {
 // Minify all specified html files in distribution folder.
 gulp.task('build:minify-html', function (cb) {
 
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
   return gulp
   .src(genSrc(M.config.buildPath, M.config.minifyHtml.files), {
     base: M.config.buildPath
   })
   .pipe(logFiles(M.config.buildPath, 'edit'))
   .pipe(gulpChange(minifyHtml))
+  .on('error', handlePipeError)
   .pipe(gulp.dest(M.config.buildPath));
 
 });
@@ -665,12 +573,18 @@ gulp.task('build:minify-html', function (cb) {
 // Remove unused styles from specified stylesheets.
 gulp.task('build:clean-css', function (cb) {
 
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
   return gulp
   .src(genSrc(M.config.buildPath, M.config.cleanCss.files), {
     base: M.config.buildPath
   })
   .pipe(logFiles(M.config.buildPath, 'edit'))
   .pipe(gulpUncss(M.config.cleanCss.options))
+  .on('error', handlePipeError)
   .pipe(gulp.dest(M.config.buildPath));
 
 });
@@ -678,12 +592,18 @@ gulp.task('build:clean-css', function (cb) {
 // Minify specified css files with cssnano.
 gulp.task('build:minify-css', function (cb) {
 
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
   return gulp
   .src(genSrc(M.config.buildPath, M.config.minifyCss.files), {
     base: M.config.buildPath
   })
   .pipe(logFiles(M.config.buildPath, 'edit'))
   .pipe(gulpCssnano())
+  .on('error', handlePipeError)
   .pipe(gulp.dest(M.config.buildPath));
 
 });
@@ -691,12 +611,18 @@ gulp.task('build:minify-css', function (cb) {
 // Generate sitemap.xml based on the HTML files in distribution directory.
 gulp.task('build:sitemap', function (cb) {
 
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
   return gulp
   .src(genSrc(M.config.buildPath, M.config.sitemap.files), {
     base: M.config.buildPath
   })
   .pipe(logFiles(M.config.buildPath, 'edit'))
   .pipe(gulpSitemap(M.config.sitemap.options))
+  .on('error', handlePipeError)
   .pipe(gulp.dest(M.config.buildPath))
   .on('end', function () {
     fLog(getNicePath(M.config.buildPath, M.config.buildPath + '/sitemap.xml'), 'create');
@@ -704,31 +630,13 @@ gulp.task('build:sitemap', function (cb) {
 
 });
 
-// Generate browserconfig.xml.
-gulp.task('build:browserconfig', function (cb) {
-
-  var data = js2xmlparser('browserconfig', {
-    'msapplication': {
-      'tile': {
-        'square70x70logo': {'@': {'src': M.config.browserconfig.tile70x70}},
-        'square150x150logo': {'@': {'src': M.config.browserconfig.tile150x150}},
-        'square310x150logo': {'@': {'src': M.config.browserconfig.tile310x150}},
-        'square310x310logo': {'@': {'src': M.config.browserconfig.tile310x310}},
-        'TileColor': M.config.browserconfig.tileColor
-      }
-    }
-  });
-
-  fs.writeFile(M.config.buildPath + '/browserconfig.xml', data, function (err) {
-    if (err) cb(err);
-    fLog(getNicePath(M.config.buildPath, M.config.buildPath + '/browserconfig.xml'), 'create');
-    cb();
-  });
-
-});
-
 // Generate new images with Jimp.
-gulp.task('build:generate-images', function () {
+gulp.task('build:generate-images', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   var ret = Promise.resolve();
   var sets = (M.config.generateImages || []);
@@ -780,18 +688,29 @@ gulp.task('build:generate-images', function () {
 // Optimize images with imagemin.
 gulp.task('build:optimize-images', function (cb) {
 
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
   return gulp
   .src(genSrc(M.config.buildPath, M.config.optimizeImages.files), {
     base: M.config.buildPath
   })
   .pipe(logFiles(M.config.buildPath, 'edit'))
   .pipe(gulpImagemin(M.config.optimizeImages.options))
+  .on('error', handlePipeError)
   .pipe(gulp.dest(M.config.buildPath));
 
 });
 
 // Revision files and references.
-gulp.task('build:revision', function () {
+gulp.task('build:revision', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   var origFilePaths = [];
   var newFilePaths = [];
@@ -811,7 +730,7 @@ gulp.task('build:revision', function () {
     var filePath = path.normalize(this.file.path);
     newFilePaths.push(filePath);
     if (origFilePaths.indexOf(filePath) === -1) {
-      fLog(getNicePath(M.config.buildPath || './', filePath), 'create');
+      fLog(getNicePath(M.config.buildPath || M.rootPath, filePath), 'create');
     }
     return content;
   }))
@@ -823,7 +742,7 @@ gulp.task('build:revision', function () {
       if (origFilePath !== newFilePaths[i]) {
         var formattedPath = '/' + path.relative(M.config.buildPath, origFilePath).split(path.sep).join('/');
         junkFiles.push(formattedPath);
-        fLog(getNicePath(M.config.buildPath || './', origFilePath), 'remove');
+        fLog(getNicePath(M.config.buildPath || M.rootPath, origFilePath), 'remove');
       }
     });
 
@@ -838,44 +757,70 @@ gulp.task('build:revision', function () {
 // 3. Atomize all unwanted files/directories.
 gulp.task('build:clean', function (cb) {
 
+  if (M.buildError) {
+    cb();
+    return;
+  }
+
+  if (!pathExists(M.config.buildPath)) {
+    cb();
+  }
+
   if (pathExists(M.config.distPath)) {
     fs.removeSync(M.config.distPath);
   }
 
-  if (pathExists(M.config.buildPath)) {
-    fs.renameSync(M.config.buildPath, M.config.distPath);
-  }
+  fs.renameSync(M.config.buildPath, M.config.distPath);
 
-  return gulp
-  .src(genSrc(M.config.distPath, M.config.cleanAfter), {
-    base: M.config.distPath,
-    read: false
-  })
-  .pipe(logFiles(M.config.distPath, 'remove'))
-  .pipe(vinylPaths(del));
+  if (M.config.cleanAfter) {
+    return gulp
+    .src(genSrc(M.config.distPath, M.config.cleanAfter), {
+      base: M.config.distPath,
+      read: false
+    })
+    .pipe(logFiles(M.config.distPath, 'remove'))
+    .pipe(vinylPaths(del))
+    .on('end', function () {
+      deleteEmpty.sync(M.config.distPath + '/');
+    });
+  }
+  else {
+    deleteEmpty.sync(M.config.distPath + '/');
+    cb();
+  }
 
 });
 
 // Validate HTML markup against W3C standards.
-gulp.task('post-build:validate-html', function (cb) {
+gulp.task('aftermath:validate-html', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   isOnline(function (err, online) {
     if (err) {
       cb(err);
     }
     else if (!online) {
-      logSkipTask('post-build:validate-html', 'No Internet connection');
+      logSkipTask('aftermath:validate-html', 'No Internet connection');
       cb();
     }
     else {
-      gulpSequence('post-build:validate-html-run')(cb);
+      gulpSequence('aftermath:validate-html-run')(cb);
     }
   });
 
 });
 
 // Validate HTML markup against W3C standards.
-gulp.task('post-build:validate-html-run', function () {
+gulp.task('aftermath:validate-html-run', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   return gulp
   .src(genSrc(M.config.distPath, M.config.validateHtml.files), {
@@ -887,7 +832,12 @@ gulp.task('post-build:validate-html-run', function () {
 
 });
 
-gulp.task('post-build:report', function () {
+gulp.task('aftermath:report', function (cb) {
+
+  if (M.buildError) {
+    cb();
+    return;
+  }
 
   var report = {
     totalSize: 0,
@@ -950,17 +900,31 @@ gulp.task('build', function (cb) {
 
 });
 
-// Development test task that creates a new Mylly instance and runs build.
-gulp.task('default', function () {
+// Development test task that creates a new Mylly production instance and runs build.
+gulp.task('test:build', function () {
 
   return (new Mylly()).build();
 
 });
 
-// Development test task that creates a new Mylly instance and runs server.
-gulp.task('server', function () {
+// Development test task that creates a new Mylly development instance and runs build.
+gulp.task('test:build:dev', function () {
+
+  return (new Mylly(true)).build();
+
+});
+
+// Development test task that creates a new Mylly production instance and runs server.
+gulp.task('test:server', function () {
 
   return (new Mylly()).server();
+
+});
+
+// Development test task that creates a new Mylly development instance and runs server.
+gulp.task('test:server:dev', function () {
+
+  return (new Mylly(true)).server();
 
 });
 
@@ -968,8 +932,8 @@ gulp.task('server', function () {
 // Exports
 //
 
-module.exports = function (opts) {
+module.exports = function (isDev, rootPath) {
 
-  return new Mylly(opts);
+  return new Mylly(isDev, rootPath);
 
 };

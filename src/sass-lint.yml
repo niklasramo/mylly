@@ -54,10 +54,10 @@ rules:
   # Style Guide
   border-zero: 1
   brace-style:
-  - 1
-  -
-    style: stroustrup
-    allow-single-line: false
+    - 1
+    -
+      style: stroustrup
+      allow-single-line: false
   clean-import-paths: 1
   empty-args:
     - 1
