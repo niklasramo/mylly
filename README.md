@@ -1,38 +1,71 @@
-# mylly
+# Mylly
 
-Mylly (finnish for *mill*) is an opinionated static site generator using specific set of Node modules to automate tedious and repetitive tasks.
+Mylly is a highly uncustomizable and opinionated Gulp boilerplate that serves as a decent static site generator.
 
-##Install
+## Features
 
-`npm install mylly --save-dev`
+* None of that Babel shit here, go fork yourself a GWST if you're into that shit.
+* A powerful template system powered by [Nunjucks](https://mozilla.github.io/nunjucks/).
+* Compile, minify and lint [Sass](http://sass-lang.com/) stylesheets.
+* Minify and lint JavaScript files.
+* Bundle JavaScript and CSS files.
+* Optimize images.
+* Generate sitemap.xml.
+* Simple file reference revisioning system. Bust that cache!
+* Built-in HTTP server with live reloading and cross-device synchronization capabilities (powered by BrowserSync).
+* And the list goes on...
 
-##Features
+## Quick start
 
-* Compile [Nunjucks](https://mozilla.github.io/nunjucks/) templates.
-* Compile markdown.
-* Validate HTML files according to W3C standards.
-* Lint and compile [Sass](http://sass-lang.com/) stylesheets.
-* Remove unused CSS styles.
-* Concatenate, minify and lint JavaScript files.
-* Resize and optimize images.
-* Generates sitemap.xml.
-* Revision files.
-* Launch BrowserSync server.
-* Generate build report.
+1. Download the project.
+2. If you haven't already, install **gulp-cli** globally: `npm install -g gulp-cli`.
+2. Do your magic in the ***src*** folder, it's the folder that's going to be compiled.
+3. Run `npm install` in the project root.
+4. Run `gulp mylly:build` in the project root.
+5. Your site is now built into the ***dist*** folder, check below for other commands.
 
-##Usage
+## Commands
 
-Mylly assumes that the source folder is located in a folder named "src" in the root of your project. When `.build()` method is called on Mylly instance a distribution folder named "dist" is automatically created to the root of you project. The distribution folder contains the compiled files which are ready to be exported to the root of your website.
+### `gulp mylly:build`
+* Build ***src*** into ***dist***.
+* `--dev`: development build (no HTML/JS/CSS minifications, no JS/CSS bundling).
+
+### `gulp mylly:watch`
+* Build ***src*** into ***dist*** automatically whenever something changes in ***src***.
+* `--dev`: development build (no HTML/JS/CSS minifications, no JS/CSS bundling).
+
+### `gulp mylly:serve`
+* Start brower-sync server and build ***src*** into ***dist*** automatically whenever something changes in ***src***.
+* `--dev`: development build (no HTML/JS/CSS minifications, no JS/CSS bundling).
+* `--livereload`: reload the page automatically at the end of the build.
+
+### `gulp mylly:audit`
+* Scan all html files in ***dist*** with a11y (https://www.npmjs.com/package/a11y).
+
+### `gulp mylly:size`
+* Log the size of files in ***dist***, per file type and total.
+
+### `gulp mylly:psi`
+* Run performance tests for your deployed site with [PageSpeed Insights](https://github.com/addyosmani/psi). The website's url is checked from package.json (`pkg.mylly.url`).
+* `--page=path/to/page`: Define a specific page's path (relative to the website root) to test for.
+* `--all`: Overrides the `--page` argument and fetches PSI data for all pages.
+* `--mobile`: Use mobile strategy, by default desktop strategy is used.
+
+## Configuration
+
+All Mylly's configuration is handled within *package.json* within the `"mylly"` property. Here's the default configuration:
 
 ```javascript
-// Create a mylly instance.
-var mylly = require('mylly')();
-// Build the dist directory.
-mylly.build();
-// Start up a local development server.
-mylly.server();
+"mylly": {
+  "url": "https://github.com/niklasramo/mylly",
+  "srcDir": "./src",
+  "distDir": "./dist",
+  "eslintConfig": "./src/.eslintrc.json",
+  "sasslintConfig": "./src/sass-lint.yml",
+  "sitemap": true
+}
 ```
 
 ## License
 
-Copyright &copy; 2015 Niklas Rämö. Licensed under **[the MIT license](LICENSE.md)**.
+Copyright &copy; 2016 Niklas Rämö. Licensed under **[the MIT license](LICENSE.md)**.
