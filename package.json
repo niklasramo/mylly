@@ -14,8 +14,8 @@
   "license": "MIT",
   "mylly": {
     "url": "https://github.com/niklasramo/mylly",
-    "srcDir": "./src",
-    "distDir": "./dist",
+    "src": "./src",
+    "dist": "./dist",
     "eslintConfig": "./src/.eslintrc.json",
     "sasslintConfig": "./src/sass-lint.yml",
     "sitemap": true

@@ -58,8 +58,8 @@ All Mylly's configuration is handled within *package.json* within the `"mylly"` 
 ```javascript
 "mylly": {
   "url": "https://github.com/niklasramo/mylly",
-  "srcDir": "./src",
-  "distDir": "./dist",
+  "src": "./src",
+  "dist": "./dist",
   "eslintConfig": "./src/.eslintrc.json",
   "sasslintConfig": "./src/sass-lint.yml",
   "sitemap": true
