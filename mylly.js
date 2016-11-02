@@ -1,18 +1,3 @@
-// TODO
-// - [x] Optionally validate SASS (Sass Lint)
-// - [x] Optionally validate JS (ESLint)
-// - [x] Optionally generate sitemap.xml (gulp-sitemap)
-// - [x] Browsersync integration.
-// - [x] Separate mylly in it's own file.
-// - [x] Task: psi
-// - [x] Task: psi-all
-// - [x] Task: size
-// - [x] Task: report-a11y (https://www.npmjs.com/package/a11y)
-// - [ ] Build-step: Generate favicons from a master icon.
-// - [ ] Build-step: Validate html.
-// - [ ] Build-step: Uncss.
-// - [ ] Task: deploy (zeit now / google firebase integration)
-
 //
 // Node core depencenies
 //
@@ -48,6 +33,7 @@ var imageminGifsicle = require('imagemin-gifsicle');
 var imageminJpegtran = require('imagemin-jpegtran');
 var imageminOptipng = require('imagemin-optipng');
 var imageminSvgo = require('imagemin-svgo');
+var jimp = require('jimp');
 var marked = require('marked');
 var md5File = require('md5-file');
 var nunjucks = require('nunjucks');
@@ -111,6 +97,22 @@ function getTemplateContext(file) {
   return Object.assign({}, getFileData(path.normalize(file.path).replace(/\.[^/.]+$/, '.ctx.js')));
 }
 
+// TODO: Make work with relative paths also.
+// TODO: Keep the orig query params and hash data.
+function addUrlHash(match, groupA, filePath) {
+  try {
+    if (filePath[0] === '"' || filePath[0] === "'") {
+      filePath = filePath.substr(1).slice(0, -1);
+    }
+    filePath = filePath.split('?')[0].split('#')[0];
+    var hash = md5File.sync(pathDist + filePath);
+    return !hash ? match : match.replace(filePath, filePath + '?rev=' + hash);
+  }
+  catch (e) {
+    return match;
+  }
+}
+
 //
 // Tasks
 //
@@ -138,7 +140,7 @@ tasks.push({
   name: 'mylly:build:lint-sass',
   fn: function (cb) {
     if (appData.sasslintConfig) {
-      return gulp.src(pathSrc + '/**/*.s+(a|c)ss')
+      return gulp.src([pathSrc + '/**/*.s+(a|c)ss', '!vendor/**/*.s+(a|c)ss'])
         .pipe(gulpSassLint({
           configFile: appData.sasslintConfig
         }))
@@ -203,7 +205,7 @@ tasks.push({
 tasks.push({
   name: 'mylly:build:minify-js',
   fn: function () {
-    return gulp.src(pathDist + '/**/*.js', {base: pathDist})
+    return gulp.src([pathDist + '/**/*.js', '!' + pathDist + '/**/*.min.js'], {base: pathDist})
       .pipe(gulpUglify({
         mangle: true,
         preserveComments: 'license',
@@ -225,7 +227,7 @@ tasks.push({
 tasks.push({
   name: 'mylly:build:minify-css',
   fn: function () {
-    return gulp.src(pathDist + '/**/*.css', {base: pathDist})
+    return gulp.src([pathDist + '/**/*.css', '!' + pathDist + '/**/*.min.css'], {base: pathDist})
       .pipe(gulpCleanCss({
         roundingPrecision: -1
       }))
@@ -244,8 +246,10 @@ tasks.push({
         searchPath: pathDist,
         transformPath: function(filePath) {
           filePath = filePath.split('?')[0];
-          filePath = filePath.replace('.js', '.min.js');
-          filePath = filePath.replace('.css', '.min.css');
+          if (filePath.indexOf('.min.js') < 0 && filePath.indexOf('.min.css') < 0) {
+            filePath = filePath.replace('.js', '.min.js');
+            filePath = filePath.replace('.css', '.min.css');
+          }
           return filePath;
         }
       }))
@@ -254,9 +258,36 @@ tasks.push({
 });
 
 tasks.push({
+  name: 'mylly:build:resize-images',
+  fn: function (cb) {
+    if (Array.isArray(appData.resizeImages) && appData.resizeImages.length) {
+      var promises = [];
+      appData.resizeImages.forEach(function (resource) {
+        resource.sizes.forEach(function (size) {
+          size = [].concat(size);
+          var width = size[0];
+          var height = size[1] || width;
+          promises.push(jimp.read(resource.src).then(function (img) {
+              var fileType = resource.src.split('.').pop();
+              var targetPath = resource.dest.replace(/\.[^/.]+$/, '-' + width + 'x' + height + '.' + fileType);
+              img.resize(width, height).write(targetPath);
+          }));
+        });
+      });
+      Promise.all(promises).then(function () {
+        cb();
+      });
+    }
+    else {
+      cb();
+    }
+  }
+});
+
+tasks.push({
   name: 'mylly:build:optimize-images',
   fn: function () {
-    return gulp.src(pathSrc + '/**/*.{jpg,png,gif,svg}', {base: pathSrc})
+    return gulp.src(pathDist + '/**/*.{jpg,png,gif,svg}', {base: pathDist})
       .pipe(gulpImagemin([
         imageminGifsicle(),
         imageminJpegtran(),
@@ -289,21 +320,9 @@ tasks.push({
   fn: function (cb) {
     var rev = shortid.generate();
     return gulp.src(pathDist + '/**/*.{html,js,css}', {base: pathDist})
-      // First revision with a static revision number.
-      .pipe(gulpReplace(/\?rev(.*?)\?/g, function (match, group) {
-        return '?rev' + rev + '?';
-      }))
-      // Try to revision with the file's hash if possible.
-      .pipe(gulpReplace(/\/static\/(.*?)\?rev(.*?)\?/g, function (match, group) {
-        var filePath = match.split('?')[0];
-        try {
-          var hash = md5File.sync('.' + filePath);
-          return filePath + '?rev' + hash + '?';
-        }
-        catch (e) {
-          return match;
-        }
-      }))
+      .pipe(gulpReplace(/(href="|src=")(.*?)"/g, addUrlHash))
+      .pipe(gulpReplace(/(href='|src=')(.*?)'/g, addUrlHash))
+      .pipe(gulpReplace(/url\((.*?)\)/g, addUrlHash))
       .pipe(gulp.dest(pathDist));
   }
 });
@@ -330,6 +349,7 @@ tasks.push({
         'mylly:build:init',
         'mylly:build:compile-templates',
         'mylly:build:compile-sass',
+        'mylly:build:resize-images',
         'mylly:build:revision',
         cb
       );
@@ -345,6 +365,7 @@ tasks.push({
         'mylly:build:minify-js',
         'mylly:build:minify-css',
         'mylly:build:create-bundles',
+        'mylly:build:resize-images',
         'mylly:build:optimize-images',
         'mylly:build:sitemap',
         'mylly:build:revision',
