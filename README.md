@@ -1,19 +1,19 @@
 # Mylly
 
-Mylly is a highly uncustomizable and opinionated Gulp boilerplate that serves as a decent static site generator.
+Mylly is a highly opinionated Gulp boilerplate that serves as a decent static site generator. I built this for my own personal usage, but feel free to use and/or modify it if you dig it.
 
 ## Features
 
-* None of that Babel shit here, go fork yourself a GWST if you're into that shit.
 * A powerful template system powered by [Nunjucks](https://mozilla.github.io/nunjucks/).
-* Compile, minify and lint [Sass](http://sass-lang.com/) stylesheets.
+* Compile and lint [SASS](http://sass-lang.com/).
+* Minify CSS files.
 * Minify and lint JavaScript files.
 * Bundle JavaScript and CSS files.
 * Optimize images.
-* Generate sitemap.xml.
-* Simple file reference revisioning system. Bust that cache!
-* Built-in HTTP server with live reloading and cross-device synchronization capabilities (powered by BrowserSync).
-* And the list goes on...
+* Auto-generate sitemap.xml.
+* Simple file reference revisioning system.
+* BrowserSync development server.
+* And then some!
 
 ## Quick start
 
@@ -60,9 +60,17 @@ All Mylly's configuration is handled within *package.json* within the `"mylly"` 
   "url": "https://github.com/niklasramo/mylly",
   "src": "./src",
   "dist": "./dist",
-  "eslintConfig": "./src/.eslintrc.json",
+  "eslintConfig": "./src/.eslintrc.js",
   "sasslintConfig": "./src/sass-lint.yml",
-  "sitemap": true
+  "sitemap": true,
+  "revParam": "rev",
+  "resizeImages": [
+    {
+      "src": "./src/assets/images/favicon.png",
+      "dest": "./dist/assets/images/favicon.png",
+      "sizes": [192, 180, 167, 152, 144, 120, 76, 57, 16]
+    }
+  ]
 }
 ```
 

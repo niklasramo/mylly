@@ -41,7 +41,6 @@ var nunjucksDate = require('nunjucks-date');
 var nunjucksMarkdown = require('nunjucks-markdown');
 var psi = require('psi');
 var runSequence = require('run-sequence');
-var shortid = require('shortid');
 var argv = require('yargs').argv;
 
 //
@@ -97,20 +96,50 @@ function getTemplateContext(file) {
   return Object.assign({}, getFileData(path.normalize(file.path).replace(/\.[^/.]+$/, '.ctx.js')));
 }
 
-// TODO: Make work with relative paths also.
-// TODO: Keep the orig query params and hash data.
-function addUrlHash(match, groupA, filePath) {
-  try {
-    if (filePath[0] === '"' || filePath[0] === "'") {
-      filePath = filePath.substr(1).slice(0, -1);
+function revisionAssetPaths(filePath, content) {
+  var mathcer = /@@\((.*?)\)|href="(.*?)"|href='(.*?)'|src="(.*?)"|src='(.*?)'|url\("(.*?)"\)|url\('(.*?)'\)|url\((.*?)\)/g;
+  return content.replace(mathcer, function (match, g1, g2, g3, g4, g5, g6, g7, g8) {
+    match = g1 || match;
+    var assetPath = g1 || g2 || g3 || g4 || g5 || g6 || g7 || g8;
+    try {
+      // Get the start index of query params.
+      var queryIndex = assetPath.indexOf('?');
+      queryIndex = queryIndex > -1 ? queryIndex : Infinity;
+      // Get the start index of hash.
+      var hashIndex = assetPath.indexOf('#');
+      hashIndex = hashIndex > -1 ? hashIndex : Infinity;
+      // Get the hash/query params start index, whichever comes first.
+      var separator = Math.min(queryIndex, hashIndex);
+      // Remove hash/query string from the path.
+      if (separator !== Infinity) {
+        assetPath = assetPath.substr(0, separator);
+      }
+      // Get hash.
+      if (assetPath[0] === '/') {
+        var hash = md5File.sync(pathDist + assetPath);
+      }
+      else {
+        var hash = md5File.sync(path.resolve(path.dirname(filePath), assetPath));
+      }
+      // If we have a hash.
+      if (hash) {
+        // If there is an active query string.
+        if (separator !== Infinity && queryIndex === separator) {
+          return match.replace(assetPath + '?', assetPath + '?' + appData.revParam + '=' + hash + '&amp;');
+        }
+        // If there is no active query string.
+        else {
+          return match.replace(assetPath, assetPath + '?' + appData.revParam + '=' + hash);
+        }
+      }
+      else {
+        return match;
+      }
     }
-    filePath = filePath.split('?')[0].split('#')[0];
-    var hash = md5File.sync(pathDist + filePath);
-    return !hash ? match : match.replace(filePath, filePath + '?rev=' + hash);
-  }
-  catch (e) {
-    return match;
-  }
+    catch (e) {
+      return match;
+    }
+  });
 }
 
 //
@@ -315,15 +344,22 @@ tasks.push({
   }
 });
 
+// TODO: This really needs to have support for relative paths
+// in order to work when there's a library included that uses relative
+// paths.
 tasks.push({
   name: 'mylly:build:revision',
   fn: function (cb) {
-    var rev = shortid.generate();
-    return gulp.src(pathDist + '/**/*.{html,js,css}', {base: pathDist})
-      .pipe(gulpReplace(/(href="|src=")(.*?)"/g, addUrlHash))
-      .pipe(gulpReplace(/(href='|src=')(.*?)'/g, addUrlHash))
-      .pipe(gulpReplace(/url\((.*?)\)/g, addUrlHash))
-      .pipe(gulp.dest(pathDist));
+    if (!appData.revParam) {
+      cb();
+    }
+    else {
+      return gulp.src(pathDist + '/**/*.{html,js,css}', {base: pathDist})
+        .pipe(gulpChange(function (content) {
+          return revisionAssetPaths(path.resolve(this.file.path), content);
+        }))
+        .pipe(gulp.dest(pathDist));
+    }
   }
 });
 

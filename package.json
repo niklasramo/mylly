@@ -1,6 +1,6 @@
 {
   "name": "mylly",
-  "version": "0.3.0-beta",
+  "version": "0.3.0",
   "description": "gulp.js boilerplate for static site generator.",
   "main": "gulpfile.js",
   "repository": {
@@ -16,14 +16,15 @@
     "url": "https://github.com/niklasramo/mylly",
     "src": "./src",
     "dist": "./dist",
-    "eslintConfig": "./src/.eslintrc.json",
+    "eslintConfig": "./src/.eslintrc.js",
     "sasslintConfig": "./src/sass-lint.yml",
     "sitemap": true,
+    "revParam": "rev",
     "resizeImages": [
       {
         "src": "./src/assets/images/favicon.png",
         "dest": "./dist/assets/images/favicon.png",
-        "sizes": [192, 180, 167, 152, 120, 76, 57, 16]
+        "sizes": [192, 180, 167, 152, 144, 120, 76, 57, 16]
       }
     ]
   },
@@ -60,7 +61,6 @@
     "nunjucks-markdown": "^2.0.0",
     "psi": "^2.0.4",
     "run-sequence": "^1.2.2",
-    "shortid": "^2.2.6",
     "yargs": "^6.3.0"
   }
 }

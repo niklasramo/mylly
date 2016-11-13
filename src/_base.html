@@ -1,16 +1,13 @@
 <!DOCTYPE html>
-<html {% block html_attributes %}lang="en" class="{% block html_class %}{% endblock %}"{% endblock %}>
+<html {% block html_attributes %}lang="{{ site.lang }}" class="{% block html_class %}{% endblock %}"{% endblock %}>
   <head>
     {% block head %}
-      <meta charset="utf-8">
+      <meta charset="{{ site.charset }}">
       <meta http-equiv="x-ua-compatible" content="ie=edge">
       <title>{% block head_title %}{{ site.name }}{% endblock %}</title>
       <meta name="description" content="{% block head_description %}{{ site.description }}{% endblock %}">
       <meta name="viewport" content="{% block head_viewport %}width=device-width, initial-scale=1{% endblock %}">
-      <link rel="canonical" href="{% block head_canonical %}{{ site.url }}{{ pagePath }}{% endblock %}">
-      {% if site.author %}
-        <meta name="author" content="{{ site.author }}">
-      {% endif %}
+      <meta name="format-detection" content="telephone=no">
       {# Disable tap highlight on IE #}
       <meta name="msapplication-tap-highlight" content="no">
       {# Web app config #}
@@ -19,7 +16,7 @@
       <link rel="icon" sizes="192x192" href="{{ path.images }}/favicon-192x192.png">
       {# Windows 8/10 tiles #}
       <meta name="msapplication-TileColor" content="#FFFFFF">
-      <meta name="msapplication-TileImage" content="{{ path.images }}/favicon-144x144.png">
+      <meta name="msapplication-TileImage" content="@@({{ path.images }}/favicon-144x144.png)">
       {# iOS web app config #}
       <meta name="apple-mobile-web-app-title" content="{{ site.name }}">
       <meta name="apple-mobile-web-app-capable" content="yes">
@@ -33,11 +30,15 @@
       {# Favicon #}
       <link type="image/png" rel="shortcut icon" href="{{ path.images }}/favicon-16x16.png">
       {% block head_styles %}
-        <!-- build:css {{ path.styles }}/dist.main.css -->
+        <!-- build:css {{ path.styles }}/base.head.dist.css -->
         <link rel="stylesheet" href="{{ path.styles }}/main.css">
         <!-- endbuild -->
       {% endblock %}
-      {% block head_scripts %}{% endblock %}
+      {% block head_scripts %}
+        <!-- build:js {{ path.scripts }}/base.head.dist.js -->
+        <script src="{{ path.scripts }}/vendor/palikka.js"></script>
+        <!-- endbuild -->
+      {% endblock %}
     {% endblock %}
   </head>
   <body {% block body_attributes %}class="{% block body_class %}{% endblock %}"{% endblock %}>
@@ -54,9 +55,9 @@
         </script>
       {% endif %}
       {% block body_scripts %}
-        <!-- build:js {{ path.scripts }}/dist.base.js -->
-        <script src="{{ path.scripts }}/a.js"></script>
-        <script src="{{ path.scripts }}/b.js"></script>
+        <!-- build:js {{ path.scripts }}/base.body.dist.js -->
+        <script src="{{ path.scripts }}/vendor/jquery.js"></script>
+        <script src="{{ path.scripts }}/main.js"></script>
         <!-- endbuild -->
       {% endblock %}
     {% endblock %}

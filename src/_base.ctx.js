@@ -7,8 +7,8 @@ module.exports = {
   site: {
     url: 'http://mywebsite.com',
     name: 'My website',
-    description: 'My website description',
-    author: 'John Doe'
+    lang: 'en',
+    charset: 'utf-8'
   },
   googleAnalyticsUa: '' // UA-XXXXXX-XX
 };
