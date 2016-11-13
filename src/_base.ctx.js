@@ -5,10 +5,11 @@ module.exports = {
     images: '/assets/images'
   },
   site: {
-    url: 'http://mywebsite.com',
+    url: require('./package.json').mylly.url,
     name: 'My website',
     lang: 'en',
-    charset: 'utf-8'
+    charset: 'utf-8',
+    ua: '' // UA-XXXXXX-XX
   },
-  googleAnalyticsUa: '' // UA-XXXXXX-XX
+  page: {}
 };
